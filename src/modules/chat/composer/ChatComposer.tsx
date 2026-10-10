@@ -72,6 +72,8 @@ type ChatComposerProps = {
   onSubmit: (event: FormEvent<HTMLFormElement> | MouseEvent<HTMLButtonElement> | TouchEvent<HTMLButtonElement>) => void;
   isDragActive: boolean;
   queuedDraft: QueuedDraft | null;
+  onSteer?: () => Promise<void>;
+  isSteering?: boolean;
   /** Set while the composer is replacing an already-sent message. */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
@@ -147,6 +149,8 @@ export default function ChatComposer({
   onSubmit,
   isDragActive,
   queuedDraft,
+  onSteer,
+  isSteering = false,
   isEditingSentMessage,
   onCancelEditMessage,
   scheduledMessages,
@@ -494,6 +498,18 @@ export default function ChatComposer({
               onSelectPermissionMode={onSelectPermissionMode}
               providerLabel={providerLabel}
             />
+
+            {isLoading && onSteer && (
+              <button
+                type="button"
+                onClick={() => { void onSteer(); }}
+                disabled={isSteering || !input.trim() || attachedFiles.length > 0}
+                title={t('input.steerHint', { defaultValue: 'Send text into the active task without restarting it' })}
+                className="h-10 shrink-0 rounded-lg border border-primary/30 px-2 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-40"
+              >
+                {isSteering ? t('input.steering', { defaultValue: 'Sending…' }) : t('input.steer', { defaultValue: 'Send now' })}
+              </button>
+            )}
 
             <PromptInputSubmit
               onClick={

@@ -1,5 +1,7 @@
 import express, { type Request, type Response } from 'express';
 
+import { providerRuntimeService } from '@/modules/providers/services/provider-runtime.service.js';
+
 import { providerAuthService } from '@/modules/providers/services/provider-auth.service.js';
 import { providerCapabilitiesService } from '@/modules/providers/services/provider-capabilities.service.js';
 import { providerMcpService } from '@/modules/providers/services/mcp.service.js';
@@ -521,6 +523,17 @@ router.get(
     res.json(createApiSuccessResponse({ provider, models }));
   }),
 );
+
+// Live input uses an acknowledged HTTP request so a failed send can retain the draft.
+router.post('/sessions/:sessionId/steer', asyncHandler(async (req: Request, res: Response) => {
+  const sessionId = parseSessionId(req.params.sessionId);
+  const content = req.body?.content;
+  if (typeof content !== 'string' || !content.trim() || content.length > 100_000) {
+    throw new AppError('Live input requires 1–100000 characters of text.', { code: 'INVALID_STEER_INPUT', statusCode: 400 });
+  }
+  await providerRuntimeService.steer(sessionId, content);
+  res.json(createApiSuccessResponse({ delivered: true }));
+}));
 
 router.post(
   '/:provider/models',

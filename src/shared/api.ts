@@ -352,6 +352,9 @@ export const api = {
 
   // Provider (coding agent) endpoints — models, capabilities, sessions, MCP, skills.
   providers: {
+    // Resolves only after the active runtime acknowledges the additional text.
+    steerSession: (sessionId: string, content: string) =>
+      post(`/api/providers/sessions/${encodeURIComponent(sessionId)}/steer`, { content }),
     capabilities: () => get('/api/providers/capabilities'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),

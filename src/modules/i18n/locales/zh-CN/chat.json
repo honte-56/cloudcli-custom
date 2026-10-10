@@ -129,7 +129,10 @@
       "willSend": "将在当前完成后发送",
       "edit": "编辑排队消息",
       "delete": "删除排队消息"
-    }
+    },
+    "steer": "立即发送",
+    "steering": "发送中…",
+    "steerHint": "把文字补充给当前任务，无需等它结束（附件请用排队发送）"
   },
   "providerSelection": {
     "title": "选择您的 AI 助手",

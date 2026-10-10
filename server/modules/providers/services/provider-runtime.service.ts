@@ -1,3 +1,6 @@
+import { sessionsDb } from '@/modules/database/index.js';
+import { AppError } from '@/shared/utils.js';
+
 import { providerRegistry } from '@/modules/providers/provider.registry.js';
 import { providerModelsService } from '@/modules/providers/services/provider-models.service.js';
 import { sessionsService } from '@/modules/providers/services/sessions.service.js';
@@ -74,6 +77,16 @@ export function createProviderRuntimeService(
 
   return {
     run,
+
+    /** Used by Providers' authenticated HTTP route to confirm delivery to an active turn. */
+    async steer(sessionId: string, content: string): Promise<void> {
+      const session = sessionsDb.getSessionById(sessionId);
+      if (!session) throw new AppError('Session not found.', { code: 'SESSION_NOT_FOUND', statusCode: 404 });
+      const runtime = dependencies.resolveProvider(session.provider).runtime;
+      if (!runtime.steer) throw new AppError('This provider does not support live input.', { code: 'STEER_UNSUPPORTED', statusCode: 409 });
+      try { await runtime.steer(sessionId, content); }
+      catch (error) { throw new AppError(error instanceof Error ? error.message : String(error), { code: 'STEER_FAILED', statusCode: 409 }); }
+    },
 
     hasRuntime(providerName: string): boolean {
       try {

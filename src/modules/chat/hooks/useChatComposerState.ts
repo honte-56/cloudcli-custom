@@ -611,6 +611,43 @@ export function useChatComposerState({
     selectedSession,
   ]);
 
+  // Tracks an acknowledged live send separately from the task's running state.
+  const [isSteering, setIsSteering] = useState(false);
+  const steeringInFlightRef = useRef(false);
+  const handleSteer = useCallback(async () => {
+    const targetSessionId = sessionKey;
+    const content = inputValueRef.current;
+    if (steeringInFlightRef.current || provider !== 'codex' || !isLoading || !targetSessionId || !content.trim() || attachedFiles.length > 0) return;
+    steeringInFlightRef.current = true;
+    setIsSteering(true);
+    try {
+      const response = await api.providers.steerSession(targetSessionId, content);
+      const body = await response.json();
+      if (!response.ok || body?.data?.delivered !== true) {
+        throw new Error(body?.error?.message || body?.error || 'Live input could not be confirmed.');
+      }
+      recordSentMessage(content, targetSessionId);
+      // A slow response must never clear new typing or append to another chat.
+      if (sessionKeyRef.current === targetSessionId) {
+        addMessage({ type: 'user', content, timestamp: new Date() });
+        if (inputValueRef.current === content) {
+          setInput('');
+          inputValueRef.current = '';
+          writeDraftText(targetSessionId, '');
+        }
+        scrollToBottom();
+      } else if (readDraftText(targetSessionId) === content) {
+        writeDraftText(targetSessionId, '');
+      }
+    } catch (error) {
+      // Retain the draft. In particular, a timeout is not proof of non-delivery.
+      if (sessionKeyRef.current === targetSessionId) addMessage({ type: 'error', content: error instanceof Error ? error.message : String(error), timestamp: new Date() });
+    } finally {
+      steeringInFlightRef.current = false;
+      setIsSteering(false);
+    }
+  }, [sessionKey, provider, isLoading, attachedFiles.length, recordSentMessage, addMessage, setInput, scrollToBottom]);
+
   const handleSubmit = useCallback(
     async (
       event: FormEvent<HTMLFormElement> | MouseEvent | TouchEvent | KeyboardEvent<HTMLTextAreaElement>,
@@ -1249,6 +1286,8 @@ export function useChatComposerState({
     isDragActive,
     openAttachmentPicker: open,
     handleSubmit,
+    handleSteer,
+    isSteering,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,

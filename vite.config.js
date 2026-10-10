@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module'
+import { cpSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { fileURLToPath, URL } from 'node:url'
 import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
@@ -25,7 +27,16 @@ export default defineConfig(({ mode }) => {
   const serverPort = env.SERVER_PORT || env.PORT || 3001
 
   return {
-    plugins: [react()],
+    plugins: [react(), {
+      name: 'copy-mermaid-runtime',
+      closeBundle() {
+        cpSync(dirname(createRequire(import.meta.url).resolve('mermaid')),
+          fileURLToPath(new URL('./dist/vendor/mermaid', import.meta.url)), {
+            recursive: true,
+            filter: (sourcePath) => !sourcePath.endsWith('.map') && !sourcePath.endsWith('.d.ts'),
+          })
+      },
+    }],
     define: {
       __APP_VERSION__: JSON.stringify(pkg.version)
     },
@@ -57,7 +68,11 @@ export default defineConfig(({ mode }) => {
       outDir: 'dist',
       chunkSizeWarningLimit: 1000,
       rollupOptions: {
+        // Use Mermaid's published ESM distribution so low-memory hosts do not
+        // parse and rebuild its entire diagram engine with every UI change.
+        external: ['mermaid'],
         output: {
+          paths: { mermaid: '/vendor/mermaid/mermaid.esm.min.mjs' },
           manualChunks: {
             'vendor-react': ['react', 'react-dom', 'react-router-dom'],
             'vendor-codemirror': [

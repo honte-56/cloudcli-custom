@@ -136,7 +136,10 @@
       "willSend": "Will send when this finishes",
       "edit": "Edit queued message",
       "delete": "Delete queued message"
-    }
+    },
+    "steer": "Send now",
+    "steering": "Sending…",
+    "steerHint": "Send text into the active task without restarting it"
   },
   "composer": {
     "reasoning": "Reasoning",

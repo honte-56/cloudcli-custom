@@ -208,6 +208,8 @@ function ChatInterface({
     isDragActive,
     openAttachmentPicker,
     handleSubmit,
+    handleSteer,
+    isSteering,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,
@@ -517,6 +519,8 @@ function ChatInterface({
           hasInput={Boolean(input.trim())}
           onClearInput={handleClearInput}
           onSubmit={handleSubmit}
+          onSteer={provider === 'codex' ? handleSteer : undefined}
+          isSteering={isSteering}
           isDragActive={isDragActive}
           queuedDraft={queuedDraft}
           onEditQueuedDraft={editQueuedDraft}

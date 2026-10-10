@@ -35,6 +35,8 @@ export interface IProviderRuntime {
     context: ProviderRuntimeContext,
   ): Promise<unknown>;
   abort(sessionId: string): boolean | Promise<boolean>;
+  /** Adds text to the current turn without restarting it; absent for exec-only providers. */
+  steer?(sessionId: string, content: string): Promise<void>;
   permissions?: ProviderRuntimePermissionGateway;
 }
 

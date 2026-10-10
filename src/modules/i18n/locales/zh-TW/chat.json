@@ -110,7 +110,10 @@
     "clickToChangeMode": "點擊變更權限模式（或在輸入框中按 Tab）",
     "showAllCommands": "顯示所有指令",
     "clearInput": "清空輸入",
-    "scrollToBottom": "捲動到底部"
+    "scrollToBottom": "捲動到底部",
+    "steer": "立即傳送",
+    "steering": "傳送中…",
+    "steerHint": "將文字補充給目前任務，無需等待結束（附件請使用排隊傳送）"
   },
   "thinkingMode": {
     "selector": {

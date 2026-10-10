@@ -11,6 +11,8 @@
  * - codexRuntime.abort(sessionId) - Cancel an active session
  */
 
+import { codexLiveRuntime } from '@/modules/providers/list/codex/codex-live-runtime.provider.js';
+
 import { Codex } from '@openai/codex-sdk';
 import type { ModelReasoningEffort, Thread, ThreadOptions } from '@openai/codex-sdk';
 
@@ -304,7 +306,8 @@ async function queryCodex(
   const sessionKey = () => sessionId || capturedSessionId || null;
 
   try {
-    codex = new Codex();
+    const codexPathOverride = process.env.CLOUDCLI_CODEX_PATH?.trim();
+    codex = new Codex({ ...(codexPathOverride ? { codexPathOverride } : {}) });
 
     const threadOptions: ThreadOptions = {
       workingDirectory,
@@ -517,8 +520,12 @@ function abortCodexSession(sessionId: string) {
 
 /** Used by the providers module's CodexProvider to run and abort SDK turns. */
 export const codexRuntime = {
-  run: queryCodex,
-  abort: abortCodexSession,
+  run: (command: string, options: AnyRecord, writer: ProviderRuntimeWriter, context: ProviderRuntimeContext) =>
+    process.env.CLOUDCLI_CODEX_RUNTIME === 'app-server'
+      ? codexLiveRuntime.run(command, options, writer, context)
+      : queryCodex(command, options, writer, context),
+  abort: (sessionId: string) => codexLiveRuntime.abort(sessionId) || abortCodexSession(sessionId),
+  steer: codexLiveRuntime.steer,
 };
 
 /**

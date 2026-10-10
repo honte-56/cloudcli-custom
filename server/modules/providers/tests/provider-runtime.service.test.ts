@@ -136,3 +136,25 @@ test('routes permission decisions through provider-owned runtime capabilities', 
     { requestId: 'request-1', sessionId: 'session-1' },
   ]);
 });
+
+test('steering resolves the provider from the session and does not run or abort it', async (t) => {
+  const { sessionsDb } = await import('@/modules/database/index.js');
+  t.mock.method(sessionsDb, 'getSessionById', () => ({ provider: 'codex' }) as never);
+  const calls: unknown[] = [];
+  const runtime = createRuntime({
+    steer: async (id, content) => { calls.push([id, content]); },
+    run: async () => { throw new Error('Must not restart'); },
+    abort: () => { throw new Error('Must not abort'); },
+  });
+  await createService([createProvider('codex', runtime)]).steer('app-id', 'new direction');
+  assert.deepEqual(calls, [['app-id', 'new direction']]);
+});
+
+test('steering rejects missing sessions and unsupported providers without dispatch', async (t) => {
+  const { sessionsDb } = await import('@/modules/database/index.js');
+  const lookup = t.mock.method(sessionsDb, 'getSessionById', () => null as never);
+  const service = createService([createProvider('codex', createRuntime())]);
+  await assert.rejects(service.steer('missing', 'input'), (error: any) => error.statusCode === 404);
+  lookup.mock.mockImplementation(() => ({ provider: 'codex' }) as never);
+  await assert.rejects(service.steer('app-id', 'input'), (error: any) => error.statusCode === 409 && error.code === 'STEER_UNSUPPORTED');
+});

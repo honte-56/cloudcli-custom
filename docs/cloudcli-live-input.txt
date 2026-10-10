@@ -1,0 +1,31 @@
+CloudCLI Codex live input fix — 2026-10-10
+
+Source: /srv/codex-workspaces/cloudcli (upstream v1.37.3).
+Release and backup: /home/codexweb/.local/lib/cloudcli-fixes/live-input-20261010.
+Activation: cloudcli-live-input-activate.service waits for active agent children
+before installing the verified release and restarting cloudcli.service. It checks
+HTTP health and restores both original build directories on failure.
+
+The service drop-in enables CLOUDCLI_CODEX_RUNTIME=app-server. Existing
+CLOUDCLI_CODEX_PATH is respected. The ordinary arrow continues to queue; Codex's
+Send now button submits text to turn/steer with the active turn id. It waits for
+acknowledgement before clearing the draft, prevents concurrent clicks, and keeps
+new typing or another session's draft intact. Attachments retain the queue path.
+Existing SDK operation is retained when the runtime flag is absent.
+
+Validation: 19 backend tests and 13 composer tests passed. The compiled HTTP
+route passed input validation and acknowledgement checks. A genuine Codex
+app-server accepted steering and interrupt on the same turn with a local test
+provider; no external inference requests were made. Client and server builds
+passed. Client type checking used --preserveSymlinks for the local linked build
+dependencies; server TypeScript compilation passed. Full lint could not run
+because the minimal build environment lacks the optional oxlint native binary.
+
+For this small-memory host, the frontend ships Mermaid's published ESM files
+instead of rebuilding the diagram engine. Its staged module imported correctly.
+All source Mermaid rendering APIs remain unchanged.
+
+Inspect activation: journalctl --user -u cloudcli-live-input-activate.service.
+Successful activation is recorded in activation.json in the release directory.
+The installed npm package is locally patched; replacing it with a fresh npm
+installation replaces this release. Keep this source and backup to reapply it.
