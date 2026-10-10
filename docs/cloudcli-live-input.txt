@@ -29,3 +29,41 @@ Inspect activation: journalctl --user -u cloudcli-live-input-activate.service.
 Successful activation is recorded in activation.json in the release directory.
 The installed npm package is locally patched; replacing it with a fresh npm
 installation replaces this release. Keep this source and backup to reapply it.
+
+Upgrade to upstream v1.37.4 — 2026-10-11
+
+Source branch: local/live-input-v1.37.4. The upstream tag is merged, retaining
+Codex's live app-server runtime, acknowledged steering API, and Send now UI.
+The single composer conflict preserves the upstream per-scope submission guard,
+background-work confirmation, and IME handling alongside live steering.
+The runtime now follows the upstream WebSocket writer contract. A missing
+backgroundSessionIds argument was also corrected in an upstream sidebar test.
+
+Release: /home/codexweb/.local/lib/cloudcli-fixes/merged-v1.37.4-20261011.
+The release stages the verified upstream npm package and patched builds. Only
+the changed production dependencies (Codex CLI, Linux binary, and SDK) are
+updated to the upstream lockfile's 0.156.1 versions. CLOUDCLI_CODEX_PATH and the
+existing live-input service drop-in remain in effect.
+
+Validation: 734 client tests and 308 provider/database tests passed. One native
+Codex-fork integration test was skipped because its upstream rollout fixture
+is absent. The repaired sidebar fixture passed both tests. Server compilation,
+client type checking, translated resource values, icon/highlighter import
+mapping, built asset references, and Mermaid's ESM runtime passed. Native lint
+checked 814 files with zero errors and 131 warnings. Full lint could not finish:
+the oxlint Rust allocator panics when the configured JS plugins are enabled.
+
+Small-host build: production imports resolve actual icon/highlighter/theme
+exports directly, and translations compile as equivalent JSON strings. Mermaid
+still ships its published ESM runtime. Build with npm run build:client --
+--minify=false and a 650 MB Node heap, then minify generated JavaScript assets
+one at a time with the Vite-installed esbuild 0.25.12 and Vite's browser targets.
+This avoids holding the Rollup graph and minifier heaps at the same time. The
+final JavaScript is minified. The helper scripts are saved with the release.
+
+Activation: cloudcli-v1374-activate.service verifies the staged SHA-256 manifest,
+prepares replacements, and waits until agent processes have finished. It backs
+up the installed package files, changed dependencies, and SQLite database, then
+starts the new service. It requires /health to report version 1.37.4 and the UI
+to return HTTP 200. Failure restores the old files and database automatically.
+Successful activation is recorded in activation.json in the release directory.

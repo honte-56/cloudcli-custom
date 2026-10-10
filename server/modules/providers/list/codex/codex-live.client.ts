@@ -64,7 +64,7 @@ export class CodexLiveClient {
   }
 
   async initialize(): Promise<void> {
-    await this.call('initialize', { clientInfo: { name: 'cloudcli', title: 'CloudCLI', version: '1.37.3' } });
+    await this.call('initialize', { clientInfo: { name: 'cloudcli', title: 'CloudCLI', version: '1.37.4' } });
     this.write({ method: 'initialized', params: {} });
   }
 

@@ -45,7 +45,7 @@ async function runLive(command: string, options: AnyRecord, writer: ProviderRunt
   const completion = new Promise<AnyRecord>((resolve, reject) => { finish = resolve; fail = reject; });
   // A process error can arrive during initialization, before completion is awaited.
   void completion.catch(() => {});
-  const send = (message: unknown) => writer.send(writer.isWebSocketWriter || writer.isSSEStreamWriter ? message : JSON.stringify(message));
+  const send = (message: unknown) => writer.send(writer.isWebSocketWriter ? message : JSON.stringify(message));
   const items = new Map<string, AnyRecord>();
   const run: LiveRun = { client: null as unknown as LiveClient, threadId: null, turnId: null, aborted: false, cancel: () => finish({ status: 'interrupted' }) };
   const normalizeItem = (item: AnyRecord) => {
