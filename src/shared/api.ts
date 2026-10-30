@@ -321,6 +321,10 @@ export const api = {
   // media call sites fetch a blob through here instead of using a bare `src`.
   readFileBlob: (projectId: string, filePath: string, options: ApiRequestOptions = {}) =>
     get(fileContentPath(projectId, filePath), options),
+  // Which of the given paths are readable files (with size and type); used to
+  // turn path-like inline code in a transcript into a downloadable file card.
+  statFiles: (projectId: string, paths: string[], options: ApiRequestOptions = {}) =>
+    post(`/api/file-tree/projects/${projectId}/files/stat`, { paths }, options),
   saveFile: (projectId: string, filePath: string, content: string) =>
     put(`/api/file-tree/projects/${projectId}/file`, { filePath, content }),
   getFiles: (projectId: string, options: ApiRequestOptions = {}) =>

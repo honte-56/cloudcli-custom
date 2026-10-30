@@ -238,11 +238,63 @@ export async function resolvePathUnderRoots(targetPath: string, roots: string[])
 }
 
 /**
- * Resolves a path that is readable because it lives under a read-only root,
- * or `null` when it does not.
+ * File names that are never served through the broad read roots, wherever they
+ * sit: environment files, private keys, and anything named like a token,
+ * credential, secret or password.
  */
-export function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
-  return resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
+const SENSITIVE_FILE_NAME = new RegExp([
+  '^\\.env(\\..*)?$',
+  '^\\.(netrc|npmrc|pypirc|git-credentials)$',
+  '^id_(rsa|dsa|ecdsa|ed25519)(\\.pub)?$',
+  '\\.(pem|key|p12|pfx|kdbx)$',
+  '(^|[._-])(token|credential|secret|password)s?([._-]|$)',
+].join('|'), 'i');
+
+/**
+ * Whether a resolved path under the home directory or the workspaces root is
+ * off limits for download.
+ *
+ * Every hidden entry directly under the home directory is refused as a whole —
+ * `.ssh`, `.aws`, `.gnupg`, `.config`, `.local`, and the CLI's own
+ * `.claude`/`.codex`/`.cloudcli` state, which holds login credentials and the
+ * app database. A `.git` directory is refused wherever it is.
+ */
+export function isSensitiveReadPath(resolvedPath: string, homeDirectory: string): boolean {
+  const normalizedPath = normalizeProjectPath(resolvedPath);
+  const normalizedHome = normalizeProjectPath(homeDirectory);
+  const segments = normalizedPath.split(/[\\/]+/).filter(Boolean);
+
+  if (segments.includes('.git') || SENSITIVE_FILE_NAME.test(segments[segments.length - 1] ?? '')) {
+    return true;
+  }
+
+  if (normalizedPath === normalizedHome || normalizedPath.startsWith(`${normalizedHome}${path.sep}`)) {
+    const homeRelative = normalizedPath.slice(normalizedHome.length).split(/[\\/]+/).filter(Boolean);
+    return homeRelative[0]?.startsWith('.') ?? false;
+  }
+
+  return false;
+}
+
+/**
+ * Resolves a path that is readable outside the project, or `null` when it is
+ * not.
+ *
+ * Two tiers: the narrow roots (temp directories, the Claude projects
+ * directory) are readable as they are; the home directory and the workspaces
+ * root are readable too — an agent often leaves a deliverable there — except
+ * for what `isSensitiveReadPath` refuses.
+ */
+export async function resolveReadOnlyRootPath(targetPath: string): Promise<string | null> {
+  const narrowPath = await resolvePathUnderRoots(targetPath, READ_ONLY_ROOTS);
+  if (narrowPath) {
+    return narrowPath;
+  }
+
+  const homeDirectory = os.homedir();
+  const broadRoots = [...new Set([homeDirectory, process.env.WORKSPACES_ROOT].filter((root): root is string => Boolean(root)))];
+  const broadPath = await resolvePathUnderRoots(targetPath, broadRoots);
+  return broadPath && !isSensitiveReadPath(broadPath, homeDirectory) ? broadPath : null;
 }
 
 function stripWindowsLongPathPrefix(inputPath: string): string {

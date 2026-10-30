@@ -130,6 +130,14 @@ export function createFileTreeRouter(
     response.json(await services.readTextFile(readProjectId(request), filePath));
   }, logger));
 
+  router.post('/projects/:projectId/files/stat', createRouteHandler(async (request, response) => {
+    const body = readBody(request);
+    const filePaths = Array.isArray(body.paths)
+      ? body.paths.filter((entry): entry is string => typeof entry === 'string' && entry.length > 0 && entry.length <= 1024)
+      : [];
+    response.json({ files: await services.statFiles(readProjectId(request), filePaths) });
+  }, logger));
+
   router.get('/projects/:projectId/files/content', createRouteHandler(async (request, response) => {
     const filePath = readRequiredString(request.query.path, 'path', 'Invalid file path');
     const file = await services.openFile(readProjectId(request), filePath);

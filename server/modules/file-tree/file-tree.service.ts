@@ -49,6 +49,9 @@ function includeEntryByFallbackDirectoryNames(entryPath: string, isDirectory: bo
     && (!isDirectory || !IGNORED_DIRECTORY_NAMES.has(path.basename(entryPath)));
 }
 
+/** Upper bound on paths answered per `statFiles` call. */
+const MAX_STAT_FILE_PATHS = 25;
+
 function createFileTreeError(message: string, statusCode: number, code: string): AppError {
   return new AppError(message, { statusCode, code });
 }
@@ -461,6 +464,29 @@ export function createFileTreeService(dependencies: FileTreeServiceDependencies)
           EISDIR: { message: 'Path is a directory, not a file', statusCode: 400 },
         });
       }
+    },
+
+    async statFiles(projectId, filePaths) {
+      const projectRoot = await resolveProjectRoot(projectId);
+      return Promise.all(filePaths.slice(0, MAX_STAT_FILE_PATHS).map(async (filePath) => {
+        try {
+          const resolvedPath = await resolveReadablePath(projectRoot, filePath);
+          const stats = await fileSystem.stat(resolvedPath);
+          if (stats.isDirectory()) {
+            return { path: filePath, exists: false };
+          }
+          return {
+            path: filePath,
+            exists: true,
+            name: path.basename(resolvedPath),
+            size: stats.size,
+            mimeType: dependencies.resolveMimeType(resolvedPath),
+          };
+        } catch {
+          // Missing, unreadable and refused paths all look the same to the caller.
+          return { path: filePath, exists: false };
+        }
+      }));
     },
 
     async openFile(projectId, filePath) {

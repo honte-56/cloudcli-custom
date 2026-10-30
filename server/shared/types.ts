@@ -1357,7 +1357,8 @@ export type FileTreeWorkspaceGateway = {
   validatePath(candidatePath: string): Promise<WorkspacePathValidationResult>;
   /**
    * Resolves a path readable outside the workspace root — the system temp
-   * directory and the Claude projects directory — or `null` when it is not
+   * directory, the Claude projects directory, and the home directory or
+   * workspaces root minus sensitive entries — or `null` when it is not
    * one. Read-only: the write policy is `validatePath` and it does not consult
    * this.
    */
@@ -1404,6 +1405,15 @@ export type FileTreeServiceDependencies = {
   logger: FileTreeLogger;
 };
 
+/** One entry of a `statFiles` answer; `exists` is false for anything not downloadable. */
+export type FileTreeFileInfo = {
+  path: string;
+  exists: boolean;
+  name?: string;
+  size?: number;
+  mimeType?: string;
+};
+
 /**
  * Complete File Tree application-service surface consumed by HTTP routes.
  *
@@ -1419,6 +1429,8 @@ export type FileTreeServices = {
   createWorkspaceFolder(folderPath: string): Promise<{ success: true; path: string }>;
   readTextFile(projectId: string, filePath: string): Promise<{ content: string; path: string }>;
   openFile(projectId: string, filePath: string): Promise<{ contentType: string; stream: Readable }>;
+  /** Which of the given paths are readable regular files, with size and type. */
+  statFiles(projectId: string, filePaths: string[]): Promise<FileTreeFileInfo[]>;
   saveTextFile(projectId: string, filePath: string, content: string): Promise<{
     success: true;
     path: string;

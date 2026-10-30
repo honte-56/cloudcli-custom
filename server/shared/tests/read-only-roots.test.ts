@@ -21,8 +21,13 @@ await mkdir(outsideDirectory);
 
 const previousHome = process.env.HOME;
 const previousUserProfile = process.env.USERPROFILE;
+const previousWorkspacesRoot = process.env.WORKSPACES_ROOT;
 process.env.HOME = fixtureHome;
 process.env.USERPROFILE = fixtureHome;
+// The workspaces root is a second broad read root. Point it at a directory of
+// its own so a machine-wide WORKSPACES_ROOT that happens to contain this
+// fixture cannot turn the "outside" directory into a readable one.
+process.env.WORKSPACES_ROOT = path.join(fixtureRoot, 'workspaces');
 
 const { resolvePathUnderRoots, resolveReadOnlyRootPath, validateWorkspacePath } = await import('@/shared/utils.js');
 
@@ -36,6 +41,11 @@ after(async () => {
     delete process.env.USERPROFILE;
   } else {
     process.env.USERPROFILE = previousUserProfile;
+  }
+  if (previousWorkspacesRoot === undefined) {
+    delete process.env.WORKSPACES_ROOT;
+  } else {
+    process.env.WORKSPACES_ROOT = previousWorkspacesRoot;
   }
   await rm(fixtureRoot, { recursive: true, force: true });
 });
@@ -136,4 +146,59 @@ test('a root that does not exist does not stop later roots from matching', async
 
 test('traversal out of the temp directory does not resolve', async () => {
   assert.equal(await resolveReadOnlyRootPath(`${os.tmpdir()}/../etc/passwd`), null);
+});
+
+test('a deliverable under the home directory resolves as readable', async () => {
+  const deliverableDirectory = path.join(fixtureHome, 'lvxing-welcome');
+  await mkdir(deliverableDirectory, { recursive: true });
+  await writeFile(path.join(deliverableDirectory, 'welcome.html'), '<html></html>', 'utf8');
+  await writeFile(path.join(deliverableDirectory, 'tokenizer.py'), 'print(1)', 'utf8');
+
+  assert.equal(
+    await resolveReadOnlyRootPath(path.join(deliverableDirectory, 'welcome.html')),
+    path.join(deliverableDirectory, 'welcome.html'),
+  );
+  // "token" inside a longer word is not a secret by name.
+  assert.equal(
+    await resolveReadOnlyRootPath(path.join(deliverableDirectory, 'tokenizer.py')),
+    path.join(deliverableDirectory, 'tokenizer.py'),
+  );
+});
+
+test('hidden home entries and secret-looking files are never served from the home directory', async () => {
+  const secretFiles = [
+    path.join(fixtureHome, '.ssh', 'id_rsa'),
+    path.join(fixtureHome, '.claude', '.credentials.json'),
+    path.join(fixtureHome, '.cloudcli', 'auth.db'),
+    path.join(fixtureHome, '.config', 'honte56.token'),
+    path.join(fixtureHome, 'app', '.env'),
+    path.join(fixtureHome, 'app', '.env.production'),
+    path.join(fixtureHome, 'app', 'server.key'),
+    path.join(fixtureHome, 'app', 'api-token.txt'),
+    path.join(fixtureHome, 'app', 'credentials.json'),
+    path.join(fixtureHome, 'app', '.git', 'config'),
+  ];
+  for (const secretFile of secretFiles) {
+    await mkdir(path.dirname(secretFile), { recursive: true });
+    await writeFile(secretFile, 'secret', 'utf8');
+    assert.equal(await resolveReadOnlyRootPath(secretFile), null, `${secretFile} must stay private`);
+  }
+});
+
+test('the Claude projects directory stays readable although the rest of .claude is not', async () => {
+  const transcript = path.join(claudeProjectsRoot, 'project', 'session.jsonl');
+  await mkdir(path.dirname(transcript), { recursive: true });
+  await writeFile(transcript, '{}', 'utf8');
+
+  assert.equal(await resolveReadOnlyRootPath(transcript), transcript);
+});
+
+test('a link in the home directory cannot be used to reach a hidden file', async () => {
+  const hiddenFile = path.join(fixtureHome, '.ssh', 'id_ed25519_target');
+  await mkdir(path.dirname(hiddenFile), { recursive: true });
+  await writeFile(hiddenFile, 'secret', 'utf8');
+  const link = path.join(fixtureHome, 'innocent-looking.txt');
+  await symlink(hiddenFile, link);
+
+  assert.equal(await resolveReadOnlyRootPath(link), null);
 });

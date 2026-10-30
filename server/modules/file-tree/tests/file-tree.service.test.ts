@@ -514,6 +514,10 @@ test('reading through a symlink out of the temp directory is still refused', asy
   // test run isolates its home there, and the Claude projects directory is a
   // read-only root too.
   const outsideDirectory = await fsPromises.mkdtemp(path.join(testDirectory, 'file-tree-outside-'));
+  // The workspaces root is a broad read root too; keep a machine-wide value
+  // that contains this test directory from making "outside" readable.
+  const previousWorkspacesRoot = process.env.WORKSPACES_ROOT;
+  process.env.WORKSPACES_ROOT = projectRoot;
 
   try {
     assert.equal(await resolveReadOnlyRootPath(outsideDirectory), null);
@@ -526,8 +530,38 @@ test('reading through a symlink out of the temp directory is still refused', asy
       (error: unknown) => (error as AppError).code === 'PATH_OUTSIDE_PROJECT',
     );
   } finally {
+    if (previousWorkspacesRoot === undefined) {
+      delete process.env.WORKSPACES_ROOT;
+    } else {
+      process.env.WORKSPACES_ROOT = previousWorkspacesRoot;
+    }
     await fsPromises.rm(temporaryDirectory, { recursive: true, force: true });
     await fsPromises.rm(projectRoot, { recursive: true, force: true });
     await fsPromises.rm(outsideDirectory, { recursive: true, force: true });
+  }
+});
+
+test('statFiles reports readable files with their size and refuses everything else', async () => {
+  const projectRoot = await fsPromises.mkdtemp(path.join(os.tmpdir(), 'file-tree-stat-'));
+
+  try {
+    await fsPromises.writeFile(path.join(projectRoot, 'report.html'), '<h1>hi</h1>', 'utf8');
+    await fsPromises.mkdir(path.join(projectRoot, 'folder'));
+    const service = createRealFileSystemService(projectRoot);
+
+    const files = await service.statFiles('project-1', [
+      'report.html',
+      path.join(projectRoot, 'report.html'),
+      'folder',
+      'missing.txt',
+      '../../etc/passwd',
+    ]);
+
+    assert.deepEqual(files.map((file) => file.exists), [true, true, false, false, false]);
+    assert.equal(files[0].name, 'report.html');
+    assert.equal(files[0].size, 11);
+    assert.equal(files[0].mimeType, 'text/plain');
+  } finally {
+    await fsPromises.rm(projectRoot, { recursive: true, force: true });
   }
 });

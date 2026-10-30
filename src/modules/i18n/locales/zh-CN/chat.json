@@ -334,5 +334,12 @@
       "unsupported": "暂无套餐用量数据。",
       "error": "无法加载套餐用量。"
     }
+  },
+  "fileCard": {
+    "download": "下载 {{name}}",
+    "downloadLabel": "下载",
+    "preview": "预览 {{name}}",
+    "previewFailed": "无法预览这个文件,仍可下载。",
+    "loading": "正在加载预览"
   }
 }

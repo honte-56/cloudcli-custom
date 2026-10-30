@@ -427,5 +427,12 @@
       "unsupported": "No plan usage data is available yet.",
       "error": "Couldn't load plan usage."
     }
+  },
+  "fileCard": {
+    "download": "Download {{name}}",
+    "downloadLabel": "Download",
+    "preview": "Preview {{name}}",
+    "previewFailed": "This file can't be previewed. You can still download it.",
+    "loading": "Loading preview"
   }
 }

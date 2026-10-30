@@ -18,6 +18,7 @@ function createFakeServices(overrides: Partial<FileTreeServices> = {}): FileTree
     createWorkspaceFolder: unexpectedOperation,
     readTextFile: unexpectedOperation,
     openFile: unexpectedOperation,
+    statFiles: unexpectedOperation,
     saveTextFile: unexpectedOperation,
     listProjectFiles: unexpectedOperation,
     createEntry: unexpectedOperation,
@@ -154,4 +155,29 @@ test('create route rejects invalid entry types without calling the service', asy
   });
 
   assert.equal(createCalled, false);
+});
+
+test('stat route forwards only well-formed paths to the service', async () => {
+  const inputs: Parameters<FileTreeServices['statFiles']>[] = [];
+  const services = createFakeServices({
+    statFiles: async (...input) => {
+      inputs.push(input);
+      return [{ path: 'a.txt', exists: true, name: 'a.txt', size: 3, mimeType: 'text/plain' }];
+    },
+  });
+
+  await withFileTreeServer(services, async (baseUrl) => {
+    const response = await fetch(`${baseUrl}/api/file-tree/projects/project-1/files/stat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paths: ['a.txt', 42, '', 'x'.repeat(2000)] }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      files: [{ path: 'a.txt', exists: true, name: 'a.txt', size: 3, mimeType: 'text/plain' }],
+    });
+  });
+
+  assert.deepEqual(inputs, [['project-1', ['a.txt']]]);
 });

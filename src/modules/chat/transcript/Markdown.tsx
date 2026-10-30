@@ -9,6 +9,9 @@ import { useTranslation } from 'react-i18next';
 
 import { MermaidDiagram } from '@/modules/code-editor';
 import { MarkdownImage } from '@/modules/chat/transcript/MarkdownImage';
+import MarkdownFileCard from '@/modules/chat/transcript/MarkdownFileCard';
+import { useMarkdownWorkspaceProjectId } from '@/modules/chat/context/MarkdownWorkspaceContext';
+import { looksLikeFileReference } from '@/modules/chat/utils/workspaceFileReference';
 import { normalizeInlineCodeFences } from '@/modules/chat/utils/chatFormatting';
 import { normalizeLatexDelimiters } from '@/modules/chat/utils/latexDelimiters';
 import { copyTextToClipboard } from '@/shared/utils';
@@ -92,9 +95,10 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
   // react-markdown v9+ dropped the `inline` prop: block code is whatever the
   // `pre` renderer hands us (forceBlock). Multiline is kept as a safety net.
   const shouldInline = !forceBlock && !/[\r\n]/.test(raw);
+  const workspaceProjectId = useMarkdownWorkspaceProjectId();
 
   if (shouldInline) {
-    return (
+    const inlineCode = (
       <code
         className={`whitespace-pre-wrap break-words rounded-md border border-border/70 bg-muted px-1.5 py-0.5 font-mono text-[0.875em] text-foreground ${className || ''
           }`}
@@ -103,6 +107,12 @@ const CodeBlock = ({ node: _node, className, children, forceBlock, ...props }: C
         {children}
       </code>
     );
+
+    // A path to a file the server can read becomes a download/preview card;
+    // until that is known (and for anything that is not a file) it stays code.
+    return workspaceProjectId && looksLikeFileReference(raw)
+      ? <MarkdownFileCard projectId={workspaceProjectId} filePath={raw.trim()} fallback={inlineCode} />
+      : inlineCode;
   }
 
   const match = /language-(\w+)/.exec(className || '');
