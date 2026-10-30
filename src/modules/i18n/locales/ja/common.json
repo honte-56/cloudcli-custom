@@ -173,7 +173,7 @@
       "selectToken": "トークンを選択",
       "selectTokenPlaceholder": "-- トークンを選択 --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "このトークンはこの操作にのみ使用されます",
+      "tokenHelp": "トークンは保存され、このプロジェクトに紐付けられ、以降のエージェント実行で使用されます。",
       "publicRepoInfo": "パブリックリポジトリには認証は不要です。パブリックリポジトリをクローンする場合、トークンは省略できます。",
       "noTokensHelp": "保存済みトークンがありません。設定 → APIキーでトークンを追加すると再利用が簡単になります。",
       "optionalTokenPublic": "GitHubトークン（パブリックリポジトリの場合は任意）",

@@ -290,7 +290,7 @@ async function spawnOpenCode(command, options = {}, ws, context) {
       opencodeProcess = spawnFunction('opencode', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env, ...permissionOptions.env },
+        env: { ...(options.environment || process.env), ...permissionOptions.env },
       });
 
       activeOpenCodeProcesses.set(processKey, opencodeProcess);

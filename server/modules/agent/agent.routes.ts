@@ -24,6 +24,10 @@ type AgentRouterDependencies = {
   users: { getFirstUser(): unknown };
   apiKeys: { validateApiKey(apiKey: string): unknown };
   githubTokens: { getActiveGithubToken(userId: number): string | null };
+  projectGithub: {
+    rememberClone(userId: number, projectPath: string, credentialId: number | null, token: string | null): void;
+    resolve: typeof import('@/modules/github-auth/index.js').resolveProjectGithubAuthentication;
+  };
   projects: { createProjectPath(projectPath: string, customName: string | null): unknown };
   models: typeof import('../providers/index.js').providerModelsService;
   /** The session gateway: an API run gets an app session row like a chat send, so the UI can list, open and subscribe to it. */
@@ -920,6 +924,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
 
     let finalProjectPath = null;
     let clonedProjectCreated = false;
+    let cloneToken = null;
     let writer = null;
     // The run as the chat socket registers one: on the running-sessions
     // list, subscribable from any tab, and completed on every exit path.
@@ -929,7 +934,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
       // Determine the final project path
       if (githubUrl) {
         // Clone repository (to projectPath if provided, otherwise generate path)
-        const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+        const projectAuthentication = !githubToken && projectPath
+          ? await dependencies.projectGithub.resolve(req.user.id, projectPath)
+          : null;
+        const tokenToUse = githubToken || projectAuthentication?.environment.GH_TOKEN || githubTokensDb.getActiveGithubToken(req.user.id);
 
         let targetPath;
         if (projectPath) {
@@ -940,6 +948,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           targetPath = path.join(os.homedir(), '.claude', 'external-projects', repoHash);
         }
 
+        cloneToken = tokenToUse;
         const clonedProject = await cloneGitHubRepo(githubUrl.trim(), tokenToUse, targetPath);
         finalProjectPath = clonedProject.path;
         clonedProjectCreated = clonedProject.created;
@@ -969,6 +978,10 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
         console.log('Project registration already exists for:', finalProjectPath);
       } else {
         console.log('Project registered:', registrationResult.project);
+      }
+
+      if (cloneToken) {
+        dependencies.projectGithub.rememberClone(req.user.id, finalProjectPath, null, cloneToken);
       }
 
       // A brand-new run gets its app session row first, as a chat send does:
@@ -1083,7 +1096,8 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
           console.log('🔄 Starting GitHub branch/PR creation workflow...');
 
           // Get GitHub token
-          const tokenToUse = githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
+          const projectAuthentication = await dependencies.projectGithub.resolve(req.user.id, finalProjectPath);
+          const tokenToUse = projectAuthentication?.environment.GH_TOKEN || githubToken || githubTokensDb.getActiveGithubToken(req.user.id);
 
           if (!tokenToUse) {
             throw new Error('GitHub token required for branch/PR creation. Please configure a GitHub token in settings.');
@@ -1167,6 +1181,7 @@ export function createAgentRouter(dependencies: AgentRouterDependencies): expres
             console.log('🔄 Pushing branch to remote...');
             const pushProcess = spawn('git', ['push', '-u', 'origin', finalBranchName], {
               cwd: finalProjectPath,
+              env: projectAuthentication?.environment || process.env,
               stdio: 'pipe'
             });
 

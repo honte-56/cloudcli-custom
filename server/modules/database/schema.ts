@@ -292,6 +292,14 @@ ${PROJECTS_TABLE_SCHEMA_SQL}
 -- NOTE: These indexes are created in migrations after legacy table-shape repairs.
 -- Creating them here can fail on upgraded installs where projects lacks those columns.
 
+-- Keep credential_id after token deletion: a configured project must fail rather than fall back to another account.
+CREATE TABLE IF NOT EXISTS project_github_credentials (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    project_id TEXT NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
+    credential_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, project_id)
+);
+
 ${SESSIONS_TABLE_SCHEMA_SQL}
 CREATE INDEX IF NOT EXISTS idx_session_ids_lookup ON sessions(session_id);
 -- NOTE: This index is created in migrations after sessions is rebuilt to include project_path.

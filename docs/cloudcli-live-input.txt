@@ -67,3 +67,72 @@ up the installed package files, changed dependencies, and SQLite database, then
 starts the new service. It requires /health to report version 1.37.4 and the UI
 to return HTTP 200. Failure restores the old files and database automatically.
 Successful activation is recorded in activation.json in the release directory.
+
+Claude live input — 2026-10-19
+
+Claude now shares the text-only Send now entry, including sessions whose main
+turn ended with background work still running. The runtime appends to the same
+SDK stdin stream; it neither starts a replacement CLI nor interrupts its tools.
+A matching command_lifecycle queued receipt confirms delivery to the CLI. The
+message is consumed at the next safe tool boundary, and an earlier result cannot
+close stdin while that text remains queued. The existing websocket writer is
+reactivated for a follow-up during a background hold. Missing receipts retain
+the draft, report uncertainty, and never retry automatically. Attachments keep
+the existing queue path.
+
+Validation: 42 focused backend tests, 7 composer tests and two genuine Claude
+Code 2.1.296 integrations passed. The integrations use a loopback-only fake
+Messages API: foreground and background Bash both finish, the message receipt
+arrives before Bash ends, the next model request contains the supplement, and
+only one CLI query is created. No external inference or production tasks are
+used. Client type checking uses --preserveSymlinks for the linked toolchain.
+Full lint's JS plugin bridge still crashes in the allocator. Native lint reports
+40 existing errors, identically reproduced on HEAD, and no new errors.
+
+Release staging: /home/codexweb/.local/lib/cloudcli-fixes/claude-live-input-20261019.
+Activation waits for agent processes in cloudcli.service's cgroup to exit,
+then swaps only dist and dist-server, retaining rollback copies. Health and
+served index checks gate activation; failure restores the previous builds.
+The activation.json receipt is written only after successful startup. Inspect
+cloudcli-claude-live-input-activate.service to distinguish staging from activation.
+
+Acknowledged ordinary sends — 2026-10-20
+---------------------------------------
+The composer now keeps drafts until chat.send or chat.edit-send receives a
+chat_send_receipt from the gateway. Offline sends fail visibly; unconfirmed
+sends show a spinner, retain input and attachments, and time out explicitly.
+Reconnects retry the same request id. Session storage retains uncertain ids
+through reloads; changing display-only session titles does not change identity.
+Uploaded attachments are reused on retry. Late replies do not clear new typing
+or append to a different open conversation.
+
+The database chat_send_receipts table stores authenticated-user/session/request
+keys, payload hashes and admission responses. Duplicate requests cannot restart
+a completed turn, including after a server restart. Pending requests left by a
+restart are reported as uncertain, never blindly executed. Accepted means the
+gateway has reserved the run and is dispatching it, not that the model finished.
+Older clients without requestId remain compatible; refresh to use confirmations.
+
+Release: /home/codexweb/.local/lib/cloudcli-fixes/send-receipts-20261020
+Activation: cloudcli-send-receipts-activate.service waits for active agents,
+swaps verified dist and dist-server directories, and checks HTTP health and
+the served frontend. It retains the previous artifacts for automatic rollback.
+
+2026-10-28: attachment limit and browser connection recovery
+- Chat attachments now accept 100 MiB per file (previously 10 MiB). Picker,
+  drag/drop and paste share validation, and rejected files display an error.
+- Uploads larger than 8 MiB use authenticated, user-scoped chunks. Each request
+  stays under the reverse proxy limit; completed files are streamed together.
+  Retries reuse upload IDs and completed descriptors rather than duplicating
+  attachments. Interrupted partial uploads expire after 24 hours, cleaned on
+  subsequent upload activity. Each HTTP chunk has a two-minute deadline.
+- Browser sockets now have a 10-second handshake deadline and a 15-second
+  application heartbeat with a 10-second response deadline. Focus, page-show,
+  network-online and visibility events probe or replace stale transports.
+  Replacement does not wait for a dead connection's close handshake, and stale
+  socket callbacks cannot overwrite current connection state. Receipt-based
+  message admission and reconnect history synchronization remain enabled.
+- Validation and staged activation records:
+  ~/.local/lib/cloudcli-fixes/connection-recovery-20261028/
+  Deployment waits for active agents before restarting; activation.json records
+  the actual switch and live service verification.

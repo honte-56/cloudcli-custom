@@ -18,6 +18,7 @@ import os from 'os';
 import path from 'path';
 
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { createClaudeInputStream } from '@/modules/providers/list/claude/claude-live-input.provider.js';
 
 import {
   appendFilesInputTag,
@@ -227,7 +228,7 @@ function mapCliOptionsToSDK(options = {}) {
 
   // Forward all host env vars (e.g. ANTHROPIC_BASE_URL) to the subprocess.
   // Since SDK 0.2.113, options.env replaces process.env instead of overlaying it.
-  sdkOptions.env = { ...process.env, CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
+  sdkOptions.env = { ...(options.environment || process.env), CLAUDE_CODE_PRINT_BG_WAIT_CEILING_MS: String(BG_WAIT_CEILING_MS) };
 
   // Resolve the executable eagerly on Windows because the SDK uses raw child_process.spawn,
   // which does not reliably follow npm's shell wrappers like cross-spawn does.
@@ -316,8 +317,9 @@ function mapCliOptionsToSDK(options = {}) {
  * @param {Object} queryInstance - SDK query instance
  * @param {Object} writer - WebSocket writer for reconnect support
  * @param {Function} releaseInput - Closes the held stdin stream so the CLI can exit
+ * @param {Function} sendInput - Adds text to this same process and awaits its receipt
  */
-function addSession(sessionId, queryInstance, writer = null, releaseInput = null) {
+function addSession(sessionId, queryInstance, writer = null, releaseInput = null, sendInput = null) {
   const existing = activeSessions.get(sessionId);
   // A different live instance under the same key means an earlier run was
   // superseded without being stopped (e.g. an abort that raced run setup and
@@ -348,6 +350,7 @@ function addSession(sessionId, queryInstance, writer = null, releaseInput = null
     status: 'active',
     writer,
     // Re-registered mid-run once the provider session id lands; keep the closer.
+    sendInput: sendInput || carried?.sendInput || null,
     releaseInput: releaseInput || carried?.releaseInput || null
   });
   // The history reader reports a background agent as running or stopped by
@@ -813,32 +816,6 @@ async function buildPromptMessages(command, images, files, cwd) {
 }
 
 /**
- * Wraps prompt messages in an async iterable that yields them and then parks.
- *
- * The SDK closes the CLI's stdin as soon as its input iterable is exhausted (and
- * immediately on `result` for string prompts). The CLI reads that EOF as the end
- * of the run and kills anything still going in the background, so the iterable
- * has to stay pending until we actually want the process gone.
- *
- * @param {Array<Object>} messages - SDKUserMessage records to send
- * @returns {{ stream: AsyncIterable, release: () => void }} Stream plus its closer
- */
-function createHeldPromptStream(messages) {
-  let release;
-  const held = new Promise((resolve) => { release = resolve; });
-
-  const stream = (async function* () {
-    for (const message of messages) {
-      yield message;
-    }
-    // Keeps stdin open — the CLI stays alive until release() is called.
-    await held;
-  })();
-
-  return { stream, release };
-}
-
-/**
  * Loads MCP server configurations from ~/.claude.json
  * @param {string} cwd - Current working directory for project-specific configs
  * @returns {Object|null} MCP servers object or null if none found
@@ -1105,10 +1082,13 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       return { behavior: 'deny', message: decision.message ?? 'User denied tool use' };
     };
 
+    // Echo stdin messages so the HTTP route confirms CLI receipt, not just a local enqueue.
+    sdkOptions.extraArgs = { ...sdkOptions.extraArgs, 'replay-user-messages': null };
+
     // The SDK's own `query`, unless the caller supplies one (tests script the
     // stream to drive the hold logic below without a CLI process).
     const createQuery = context.createQuery ?? query;
-    let heldPrompt = createHeldPromptStream(promptMessages);
+    let heldPrompt = createClaudeInputStream(promptMessages);
     releasePromptStream = heldPrompt.release;
     try {
       queryInstance = createQuery({
@@ -1122,7 +1102,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       delete sdkOptions.hooks;
       // Discard the abandoned stream and build a fresh one for the retry.
       heldPrompt.release();
-      heldPrompt = createHeldPromptStream(promptMessages);
+      heldPrompt = createClaudeInputStream(promptMessages);
       releasePromptStream = heldPrompt.release;
       queryInstance = createQuery({
         prompt: heldPrompt.stream,
@@ -1130,9 +1110,21 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       });
     }
 
+    const sendInput = (content) => {
+      if (!heldPrompt.open || abortedSessionIds.has(sessionKey()) || supersededInstances.has(queryInstance)) {
+        return Promise.reject(new Error('Claude is no longer accepting live input.'));
+      }
+      const receipt = heldPrompt.send(content);
+      // A held background session resumes on the same writer and process.
+      turnCompleteSent = false;
+      ws.send(createNormalizedMessage({ kind: 'status', text: 'Processing…', status: 'live_input', provider: 'claude', sessionId: capturedSessionId || sessionId }));
+      scheduleRelease();
+      return receipt;
+    };
+
     // Track the query instance for abort capability
     if (sessionKey()) {
-      addSession(sessionKey(), queryInstance, ws, releasePromptStream);
+      addSession(sessionKey(), queryInstance, ws, releasePromptStream, sendInput);
     }
 
     // Process streaming messages
@@ -1142,7 +1134,7 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       if (message.session_id && !capturedSessionId) {
 
         capturedSessionId = message.session_id;
-        addSession(sessionKey(), queryInstance, ws, releasePromptStream);
+        addSession(sessionKey(), queryInstance, ws, releasePromptStream, sendInput);
 
         // Set session ID on writer
         if (ws.setSessionId && typeof ws.setSessionId === 'function') {
@@ -1156,6 +1148,11 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
         }
       } else {
         // session_id already captured
+      }
+
+      // Own stdin echoes acknowledge the HTTP send; the composer already adds the row.
+      if (heldPrompt.acknowledge(message) || (message.type === 'user' && message.isReplay)) {
+        continue;
       }
 
       // Transform and normalize message via adapter
@@ -1203,13 +1200,22 @@ async function queryClaudeSDK(command, options = {}, ws, context) {
       // its own, which closing stdin now would cut short.
       if (
         heldForBackgroundWork
+        && turnCompleteSent
         && message.type === 'system'
         && message.subtype === 'task_notification'
         && message.status === 'stopped'
         && !backgroundWork.hasOutstanding(sessionKey())
+        && !heldPrompt.pending
       ) {
         heldForBackgroundWork = false;
         releasePromptStream();
+      }
+
+      if (message.type === 'result' && heldPrompt.pending) {
+        // A result can cross an input still waiting in stdin. Keep its process and
+        // client run alive until the CLI has consumed the follow-up and answered.
+        scheduleRelease();
+        continue;
       }
 
       if (message.type === 'result') {
@@ -1499,6 +1505,13 @@ function reconnectSessionWriter(sessionId, newRawWs) {
 export const claudeRuntime = {
   run: queryClaudeSDK,
   abort: abortClaudeSDKSession,
+  async steer(sessionId, content) {
+    const session = getSession(sessionId);
+    if (!session || session.status !== 'active' || !session.sendInput) {
+      throw new Error('No active Claude session accepts live input.');
+    }
+    await session.sendInput(content);
+  },
   permissions: {
     resolve: resolveToolApproval,
     listPending: getPendingApprovalsForSession,

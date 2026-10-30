@@ -853,5 +853,19 @@
     "teamManagementDescription": "Multiple users, role-based access, and shared projects for your team.",
     "licensed": "Licensed under AGPL-3.0",
     "proCta": "Available with CloudCLI Pro"
+  },
+  "projectGithub": {
+    "title": "Project GitHub authentication",
+    "description": "Agents use the token selected for each project with git and gh. Cloned projects remember the selected token. Tokens are readable by the agent process.",
+    "project": "Project",
+    "token": "GitHub token",
+    "none": "No project binding (use machine authentication)",
+    "deleted": "Deleted token",
+    "unavailable": "The bound token is disabled or deleted. Select another token.",
+    "save": "Save binding",
+    "saved": "Saved. Applies to the next agent run.",
+    "loadError": "Could not load project authentication.",
+    "saveError": "Could not save project authentication.",
+    "noProjects": "Create or clone a project first."
   }
 }

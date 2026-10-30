@@ -28,6 +28,7 @@ function buildDependencies(overrides: Partial<NonNullable<TestDependencies>> = {
     },
     registerProject: async () => ({ project: { projectId: 'project-1' } }),
     logError: () => undefined,
+    rememberCredential: () => undefined,
     ...overrides,
   };
 }
@@ -498,6 +499,7 @@ test('startCloneProject clones a real repository with the credential helper in g
       },
       {
         validatePath: async () => ({ valid: true, resolvedPath: workspacePath }),
+        rememberCredential: () => undefined,
         registerProject: async (projectPath, customName) => ({
           project: { path: projectPath, name: customName },
         }),

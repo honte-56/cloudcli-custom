@@ -74,6 +74,7 @@ type ChatComposerProps = {
   queuedDraft: QueuedDraft | null;
   onSteer?: () => Promise<void>;
   isSteering?: boolean;
+  isSending?: boolean;
   /** Set while the composer is replacing an already-sent message. */
   isEditingSentMessage: boolean;
   onCancelEditMessage: () => void;
@@ -151,6 +152,7 @@ export default function ChatComposer({
   queuedDraft,
   onSteer,
   isSteering = false,
+  isSending = false,
   isEditingSentMessage,
   onCancelEditMessage,
   scheduledMessages,
@@ -408,6 +410,12 @@ export default function ChatComposer({
             </PromptInputHeader>
           )}
 
+          {fileErrors.size > 0 && (
+            <div role="alert" className="px-4 py-2 text-sm text-destructive">
+              {Array.from(fileErrors, ([name, error]) => <p key={name}>{name}: {error}</p>)}
+            </div>
+          )}
+
           <input {...getInputProps()} />
 
           <PromptInputBody>
@@ -499,7 +507,7 @@ export default function ChatComposer({
               providerLabel={providerLabel}
             />
 
-            {isLoading && onSteer && (
+            {onSteer && (
               <button
                 type="button"
                 onClick={() => { void onSteer(); }}
@@ -528,7 +536,7 @@ export default function ChatComposer({
                       : undefined
               }
               disabled={
-                isLoading
+                isSending ? true : isLoading
                   ? false
                   : isRecording
                     ? false
@@ -536,11 +544,11 @@ export default function ChatComposer({
                       ? true
                       : !input.trim() && attachedFiles.length === 0
               }
-              aria-label={submitAriaLabel}
-              title={submitAriaLabel}
+              aria-label={isSending ? "等待服务器接收确认" : submitAriaLabel}
+              title={isSending ? "等待服务器接收确认" : submitAriaLabel}
               className="h-10 w-10 sm:h-10 sm:w-10"
             >
-              {isTranscribing ? (
+              {isTranscribing || isSending ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : canQueueDraft ? (
                 <ArrowUpIcon className="h-4 w-4" />

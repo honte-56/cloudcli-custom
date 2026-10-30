@@ -378,3 +378,22 @@ alongside the implementation.
 - Assuming one provider's MCP config file format works for the others.
 
 
+
+## Live text input
+
+`POST /sessions/:sessionId/steer` dispatches through the session's provider.
+Codex uses its active app-server turn; Claude appends to the existing SDK input
+stream with `priority: next`, preserving running tools and background tasks.
+The route confirms Claude's matching `command_lifecycle` queue receipt (or user
+replay), not a local enqueue. Queued text remains pending until its replay,
+so an earlier result cannot close stdin before the follow-up is consumed.
+Missing receipts retain the browser draft and report uncertain delivery; they
+are not retried automatically. Attachments still use ordinary queued sending.
+
+A Claude process held for background work can also receive live text. Its
+`live_input` status reactivates the existing websocket run and its next result
+completes that follow-up. Normal sending still has its existing replacement
+behavior; callers that intend to preserve background work must use steering.
+
+Focused real-CLI verification (local fake API, no external inference):
+`CLOUDCLI_TEST_CLAUDE_LIVE=1 npx tsx --tsconfig server/tsconfig.json --test server/modules/providers/tests/claude-live-input.integration.test.ts`.

@@ -104,6 +104,7 @@ const uploadFormDataWithProgress = (
     const xhr = new XMLHttpRequest();
 
     xhr.open('POST', api.uploadFilesUrl(projectId));
+    xhr.timeout = 120_000;
 
     const token = getStoredAuthToken();
     if (!IS_PLATFORM && token) {
@@ -140,6 +141,7 @@ const uploadFormDataWithProgress = (
 
     xhr.onerror = () => reject(new Error('Upload failed. Check your connection and try again.'));
     xhr.onabort = () => reject(new Error('Upload canceled.'));
+    xhr.ontimeout = () => reject(new Error('File upload timed out. Check your connection and retry.'));
 
     xhr.send(formData);
   });

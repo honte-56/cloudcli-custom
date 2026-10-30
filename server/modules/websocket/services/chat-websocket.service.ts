@@ -5,6 +5,7 @@ import type { WebSocket } from 'ws';
 import { sessionsDb } from '@/modules/database/index.js';
 import { providerModelsService, sessionsService } from '@/modules/providers/index.js';
 import { chatRunRegistry } from '@/modules/websocket/services/chat-run-registry.service.js';
+import { acknowledgeChatSend, withChatReceipt } from '@/modules/websocket/services/chat-receipts.service.js';
 import { connectedClients, WS_OPEN_STATE } from '@/modules/websocket/services/websocket-state.service.js';
 import {
   getGlobalImageAssetsDir,
@@ -289,6 +290,7 @@ async function dispatchRun(
     // be taken back. Inside the try so a rewind that throws still releases the
     // run instead of leaving the session processing forever.
     await beforeRun?.(run);
+    acknowledgeChatSend(data);
     await dependencies.runtime.run(provider, command, runtimeOptions, run.writer);
   } catch (error) {
     failure = error instanceof Error ? error.message : String(error);
@@ -675,11 +677,16 @@ export function handleChatConnection(
       const messageType = typeof data.type === 'string' ? data.type : '';
 
       switch (messageType) {
+        case 'chat.ping':
+          // Application heartbeat lets browsers detect half-open transports;
+          // native WebSocket ping/pong is invisible to browser JavaScript.
+          ws.send(JSON.stringify({ kind: 'chat_pong' }));
+          return;
         case 'chat.edit-send':
-          await handleChatEditSend(ws, userId, data, dependencies);
+          await withChatReceipt(ws, userId, data, () => handleChatEditSend(ws, userId, data, dependencies));
           return;
         case 'chat.send':
-          await handleChatSend(ws, userId, data, dependencies);
+          await withChatReceipt(ws, userId, data, () => handleChatSend(ws, userId, data, dependencies));
           return;
         case 'chat.abort':
           await handleChatAbort(ws, data, dependencies);

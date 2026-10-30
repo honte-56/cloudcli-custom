@@ -23,12 +23,13 @@ export class CodexLiveClient {
     private onNotification: (method: string, params: AnyRecord) => void,
     private onFailure: (error: Error) => void,
     launcher?: string,
+    environment: NodeJS.ProcessEnv = process.env,
   ) {
     const pathOverride = !launcher ? process.env.CLOUDCLI_CODEX_PATH?.trim() : undefined;
     this.child = spawn(pathOverride || process.execPath, pathOverride
       ? ['app-server']
       : [launcher || createRequire(import.meta.url).resolve('@openai/codex/bin/codex.js'), 'app-server'],
-    { stdio: ['pipe', 'pipe', 'pipe'], env: process.env });
+    { stdio: ['pipe', 'pipe', 'pipe'], env: environment });
     this.reader = readline.createInterface({ input: this.child.stdout });
     this.child.stderr.on('data', (chunk) => { this.stderr = (this.stderr + String(chunk)).slice(-2000); });
     this.child.on('error', (error) => this.fail(error));

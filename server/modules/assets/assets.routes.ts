@@ -9,6 +9,8 @@ import {
   openStoredAttachmentAsset,
 } from '@/modules/assets/services/image-assets.service.js';
 
+import { storeAttachmentChunk } from '@/modules/assets/services/chunk-upload.service.js';
+
 const router = express.Router();
 
 // Multer writes uploads straight into the global assets folder; the service
@@ -44,7 +46,7 @@ const upload = multer({
 const attachmentUpload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024,
+    fileSize: 100 * 1024 * 1024,
     files: 10,
   },
 });
@@ -72,7 +74,7 @@ router.post('/images', (req, res) => {
 /**
  * Stores provider-neutral chat attachments. Files of any MIME type are
  * accepted because providers inspect them as data through their file-reading
- * tools; uploads are capped at 10 files and 10MB per file.
+ * tools; uploads are capped at 10 files and 100MB per file.
  */
 router.post('/files', (req, res) => {
   attachmentUpload.array('files', 10)(req, res, (err: unknown) => {
@@ -87,6 +89,33 @@ router.post('/files', (req, res) => {
     }
 
     res.json({ attachments: buildStoredAttachmentRecords(files) });
+  });
+});
+
+// Each request stays below reverse proxy body limits; memory is bounded to 8MB.
+const chunkUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 8 * 1024 * 1024, files: 1, fields: 5, fieldSize: 1024 } }).single('chunk');
+router.post('/files/chunks', (req, res) => {
+  chunkUpload(req, res, async (error: unknown) => {
+    const userId = Number((req as express.Request & { user?: { id?: number | string } }).user?.id);
+    if (!Number.isSafeInteger(userId) || userId <= 0) {
+      res.status(401).json({ error: 'Authentication required' });
+      return;
+    }
+    if (error || !req.file || typeof req.body?.uploadId !== 'string'
+      || typeof req.body?.name !== 'string' || typeof req.body?.mimeType !== 'string') {
+      res.status(400).json({ error: error instanceof Error ? error.message : 'Invalid upload chunk' });
+      return;
+    }
+    try {
+      const result = await storeAttachmentChunk({
+        userId, uploadId: req.body.uploadId, index: Number(req.body.index),
+        totalSize: Number(req.body.totalSize), name: req.body.name,
+        mimeType: req.body.mimeType, bytes: req.file.buffer,
+      });
+      res.json(result);
+    } catch (caught) {
+      res.status(400).json({ error: caught instanceof Error ? caught.message : 'File upload failed' });
+    }
   });
 });
 

@@ -1,3 +1,5 @@
+import ProjectGithubCredentialSection from '@/modules/settings/tabs/api-settings/sections/ProjectGithubCredentialSection';
+import type { AgentSettingsProject } from '@/shared/types';
 import { useTranslation } from 'react-i18next';
 
 import { useCredentialsSettings } from '@/modules/settings/hooks/useCredentialsSettings';
@@ -6,7 +8,7 @@ import GithubCredentialsSection from '@/modules/settings/tabs/api-settings/secti
 import NewApiKeyAlert from '@/modules/settings/tabs/api-settings/sections/NewApiKeyAlert';
 
 /** Rendered by Settings for the "api" tab, managing CloudCLI API keys and GitHub credentials. */
-export default function CredentialsSettingsTab() {
+export default function CredentialsSettingsTab({ projects = [] }: { projects?: AgentSettingsProject[] }) {
   const { t } = useTranslation('settings');
   const {
     apiKeys,
@@ -69,6 +71,8 @@ export default function CredentialsSettingsTab() {
         onToggleApiKey={toggleApiKey}
         onDeleteApiKey={deleteApiKey}
       />
+
+      <ProjectGithubCredentialSection projects={projects} credentials={githubCredentials} />
 
       <GithubCredentialsSection
         githubCredentials={githubCredentials}

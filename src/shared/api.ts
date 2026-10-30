@@ -181,6 +181,28 @@ const fileContentPath = (projectId: string, filePath: string) =>
 const pluginAssetPath = (pluginName: string, assetFile: string) =>
   `/api/plugins/${encodeURIComponent(pluginName)}/assets/${encodeURIComponent(assetFile)}`;
 
+// Keep a file's upload identity through network retries; successful composer
+// submissions cache the returned descriptor independently of the transport.
+const attachmentUploadIds = new WeakMap<File, string>();
+const ATTACHMENT_CHUNK_SIZE = 8 * 1024 * 1024;
+
+async function postAttachmentForm(url: string, body: FormData): Promise<Response> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 120_000);
+  try {
+    const response = await authenticatedFetch(url, { method: 'POST', body, signal: controller.signal });
+    // Include the response body in the deadline, not just its headers.
+    const text = await response.text();
+    return new Response(text, { status: response.status, headers: response.headers });
+  } catch {
+    throw new Error(controller.signal.aborted
+      ? 'File upload timed out. Your input and attachments are retained; please retry.'
+      : 'File upload failed. Check your connection and retry.');
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 // ─── API endpoints ──────────────────────────────────────────────────────────
 // Every `/api/...` path the frontend talks to is declared here; components
 // import a named method instead of assembling URLs of their own.
@@ -208,6 +230,8 @@ export const api = {
   // After the projectName → projectId migration the path/query identifier is
   // the DB-assigned `projectId`; parameter names reflect that for clarity.
   projects: () => get('/api/projects'),
+  projectGithubCredential: (projectId: string) => get(`/api/projects/${encodeURIComponent(projectId)}/github-credential`),
+  setProjectGithubCredential: (projectId: string, credentialId: number | null) => put(`/api/projects/${encodeURIComponent(projectId)}/github-credential`, { credentialId }),
   archivedProjects: () => get('/api/projects/archived'),
   projectSessions: (
     projectId: string,
@@ -410,6 +434,8 @@ export const api = {
     capabilities: () => get('/api/providers/capabilities'),
     authStatus: (provider: string) =>
       get(`/api/providers/${encodeURIComponent(provider)}/auth/status`),
+    planUsage: (provider: string) =>
+      get(`/api/providers/${encodeURIComponent(provider)}/plan-usage`),
     claudeSettingsPermissions: () => get('/api/providers/claude/settings-permissions'),
 
     models: (provider: string) => get(`/api/providers/${provider}/models`),
@@ -434,8 +460,6 @@ export const api = {
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
     sessionActiveModel: (provider: string, sessionId: string) =>
       get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
-    planUsage: (provider: string) =>
-      get(`/api/providers/${encodeURIComponent(provider)}/plan-usage`),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>
       post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`, {
         model,
@@ -477,12 +501,38 @@ export const api = {
 
   // Chat attachments, stored globally under ~/.cloudcli/assets
   assets: {
-    uploadFiles: (formData: FormData) =>
-      authenticatedFetch('/api/assets/files', {
-        method: 'POST',
-        headers: {}, // Let browser set Content-Type for FormData
-        body: formData,
-      }),
+    uploadFiles: async (formData: FormData): Promise<Response> => {
+      const files = formData.getAll('files').filter((entry): entry is File => entry instanceof File);
+      if (files.some(file => file.size > 100 * 1024 * 1024)) {
+        throw new Error('File too large (max 100MB).');
+      }
+      if (files.every(file => file.size <= ATTACHMENT_CHUNK_SIZE)) {
+        return postAttachmentForm('/api/assets/files', formData);
+      }
+      const attachments: unknown[] = [];
+      for (const file of files) {
+        const uploadId = attachmentUploadIds.get(file) ?? crypto.randomUUID();
+        attachmentUploadIds.set(file, uploadId);
+        for (let index = 0; index < Math.ceil(file.size / ATTACHMENT_CHUNK_SIZE); index++) {
+          const chunk = new FormData();
+          chunk.append('uploadId', uploadId);
+          chunk.append('index', String(index));
+          chunk.append('totalSize', String(file.size));
+          chunk.append('name', file.name);
+          chunk.append('mimeType', file.type || 'application/octet-stream');
+          chunk.append('chunk', file.slice(index * ATTACHMENT_CHUNK_SIZE, (index + 1) * ATTACHMENT_CHUNK_SIZE), 'chunk');
+          const response = await postAttachmentForm('/api/assets/files/chunks', chunk);
+          if (!response.ok) return response;
+          const result = await response.json();
+          if (Array.isArray(result.attachments) && result.attachments.length === 1) {
+            attachments.push(result.attachments[0]);
+            break;
+          }
+        }
+      }
+      if (attachments.length !== files.length) throw new Error('File upload returned an incomplete result. Please retry.');
+      return new Response(JSON.stringify({ attachments }), { headers: { 'Content-Type': 'application/json' } });
+    },
     file: (storedName: string) => get(`/api/assets/files/${encodeURIComponent(storedName)}`),
     image: (filename: string, options: ApiRequestOptions = {}) =>
       get(`/api/assets/images/${encodeURIComponent(filename)}`, options),

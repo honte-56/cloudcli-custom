@@ -239,6 +239,14 @@ Yes, for self-hosted. CloudCLI UI reads from and writes to the same `~/.claude` 
 - **[GitHub Issues](https://github.com/siteboon/claudecodeui/issues)** — bug reports and feature requests
 - **[Contributing Guide](CONTRIBUTING.md)** — how to contribute to the project
 
+## Project GitHub authentication
+
+Cloning with a GitHub token binds that project to the selected credential. A newly entered token is saved in the credentials database for later runs. Existing projects can select or clear a binding in **Settings → API → Project GitHub authentication**. Bindings are per user; linked Git worktrees inherit their main repository's binding unless explicitly configured.
+
+New and resumed Claude, Codex, Cursor and OpenCode runs receive project authentication for `git` and `gh`. GitHub SSH remotes are mapped to HTTPS for that process without rewriting repository configuration. Authentication does not set Git author name/email or grant permissions beyond the token's GitHub permissions. Saves take effect on the next run; already running processes retain their original credentials. A deleted or disabled bound token blocks the next run until another token is selected or the binding is cleared. Unbound projects retain machine authentication.
+
+Tokens are stored in the existing SQLite credentials table. Project records store only token IDs, and settings responses and agent instructions never contain the secret. Agent subprocesses receive the secret in their environment and can read it; this feature does not isolate credentials from agents with local execution access.
+
 ## License
 
 GNU Affero General Public License v3.0 or later (AGPL-3.0-or-later) — see [LICENSE](LICENSE) for the full text, including additional terms under Section 7.

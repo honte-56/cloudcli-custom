@@ -1,3 +1,4 @@
+import { resolveProjectGithubAuthentication } from '@/modules/github-auth/index.js';
 import { sessionsDb } from '@/modules/database/index.js';
 import { AppError } from '@/shared/utils.js';
 
@@ -65,14 +66,26 @@ export function createProviderRuntimeService(
     },
   });
 
-  const run = (
+  const run = async (
     providerName: LLMProvider,
     command: string,
     options: AnyRecord,
     writer: ProviderRuntimeWriter,
   ): Promise<unknown> => {
     const provider = dependencies.resolveProvider(providerName);
-    return provider.runtime.run(command, options, writer, createRuntimeContext(provider));
+    // Runtime environments come from the server, never from chat/API options.
+    const { environment: _untrustedEnvironment, ...runtimeOptions } = options;
+    const authentication = writer.userId && (options.cwd || options.projectPath)
+      ? await resolveProjectGithubAuthentication(Number(writer.userId), options.cwd || options.projectPath)
+      : null;
+    // App session IDs exist before the first turn; only a native session ID means resume.
+    const includeAuthenticationInstructions = authentication
+      && !dependencies.resolveProviderSessionId(options.sessionId);
+    return provider.runtime.run(
+      includeAuthenticationInstructions ? `${authentication.instructions}\n\n${command}` : command,
+      authentication ? { ...runtimeOptions, environment: authentication.environment } : runtimeOptions,
+      writer, createRuntimeContext(provider),
+    );
   };
 
   return {

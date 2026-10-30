@@ -109,6 +109,14 @@ function decorateAndRecordEvent(run: ChatRun, message: NormalizedMessage): Norma
     return null;
   }
 
+  // Claude can accept text while held for background work. Resume that same
+  // registered writer so subscribe/abort and its next completion remain valid.
+  if (message.kind === 'status' && message.status === 'live_input'
+    && runs.get(run.appSessionId) === run && run.status === 'completed') {
+    run.status = 'running';
+    run.completedAt = null;
+  }
+
   run.lastSeq += 1;
 
   const outbound: NormalizedMessage = {

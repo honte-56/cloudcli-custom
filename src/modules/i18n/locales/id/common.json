@@ -174,7 +174,7 @@
       "selectToken": "Pilih Token",
       "selectTokenPlaceholder": "-- Pilih token --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "Token ini hanya akan digunakan untuk operasi ini",
+      "tokenHelp": "Token disimpan dan dikaitkan dengan proyek ini untuk penggunaan agen berikutnya.",
       "publicRepoInfo": "Repositori publik tidak memerlukan autentikasi. Token dapat dikosongkan saat clone repositori publik.",
       "noTokensHelp": "Tidak ada token tersimpan. Token dapat ditambahkan di Pengaturan → Kunci API agar mudah digunakan kembali.",
       "optionalTokenPublic": "Token GitHub (Opsional untuk Repo Publik)",

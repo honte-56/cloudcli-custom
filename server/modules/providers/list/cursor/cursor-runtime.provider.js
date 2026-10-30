@@ -159,7 +159,7 @@ async function spawnCursor(command, options = {}, ws, context) {
       const cursorProcess = spawnFunction('cursor-agent', args, {
         cwd: workingDir,
         stdio: ['pipe', 'pipe', 'pipe'],
-        env: { ...process.env } // Inherit all environment variables
+        env: options.environment || process.env // Inherit all environment variables
       });
 
       activeCursorProcesses.set(processKey, cursorProcess);

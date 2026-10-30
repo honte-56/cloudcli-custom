@@ -615,5 +615,19 @@
     "installAriaLabel": "插件 git 仓库 URL",
     "tab": "标签",
     "runningStatus": "运行中"
+  },
+  "projectGithub": {
+    "title": "项目 GitHub 认证",
+    "description": "Agent 使用项目绑定的令牌运行 git 和 gh。克隆时会记住所选令牌；Agent 进程可以读取令牌。",
+    "project": "项目",
+    "token": "GitHub 令牌",
+    "none": "不绑定（使用本机认证）",
+    "deleted": "令牌已删除",
+    "unavailable": "绑定的令牌已停用或删除，请重新选择。",
+    "save": "保存绑定",
+    "saved": "已保存，下次 Agent 运行时生效。",
+    "loadError": "无法加载项目认证。",
+    "saveError": "无法保存项目认证。",
+    "noProjects": "请先创建或克隆项目。"
   }
 }

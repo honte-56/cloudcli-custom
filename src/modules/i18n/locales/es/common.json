@@ -173,7 +173,7 @@
       "selectToken": "Seleccionar token",
       "selectTokenPlaceholder": "-- Selecciona un token --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "Este token se usará solo para esta operación",
+      "tokenHelp": "El token se guarda y se vincula a este proyecto para las próximas ejecuciones del agente.",
       "publicRepoInfo": "Los repositorios públicos no requieren autenticación. Puedes omitir el token si clonas un repo público.",
       "noTokensHelp": "No hay tokens guardados disponibles. Puedes añadir tokens en Ajustes → Claves API para reutilizarlos fácilmente.",
       "optionalTokenPublic": "Token de GitHub (opcional para repos públicos)",

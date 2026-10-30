@@ -28,6 +28,7 @@ function createDependencies(
     users: { getFirstUser: () => ({ id: 1, username: 'test-user' }) },
     apiKeys: { validateApiKey: () => undefined },
     githubTokens: { getActiveGithubToken: () => null },
+    projectGithub: { rememberClone() {}, resolve: async () => null },
     projects: { createProjectPath: () => ({ outcome: 'created' }) },
     models: {} as AgentDependencies['models'],
     sessions: {
@@ -251,4 +252,61 @@ test('Agent route starts codex on the catalog default when the request names no 
   });
 
   assert.deepEqual(codexCalls.map((call) => call.model), ['catalog-default']);
+});
+
+test('Agent API uses the project binding for both push and PR creation', async () => {
+  let githubAuth: string | undefined;
+  let pushedToken: string | undefined;
+  const child = (output = '') => {
+    const process = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+    setImmediate(() => { process.stdout.end(output); process.emit('close', 0); });
+    return process;
+  };
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => {} } as never,
+    githubTokens: { getActiveGithubToken: () => 'wrong-latest-account' },
+    projectGithub: {
+      rememberClone() {},
+      resolve: async () => ({ environment: { GH_TOKEN: 'bound-account', CLOUDCLI_GITHUB_TOKEN: 'bound-account' }, instructions: '' }),
+    },
+    models: { getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'default' }) } as never,
+    queryClaude: async () => {},
+    spawnProcess: ((_command: string, args: string[], options: { env?: NodeJS.ProcessEnv }) => {
+      if (args[0] === 'config') return child('https://github.com/example/repo.git\n');
+      if (args[0] === 'push') pushedToken = options.env?.CLOUDCLI_GITHUB_TOKEN;
+      return child('change\n');
+    }) as never,
+    GithubClient: class {
+      constructor(options: { auth: string }) { githubAuth = options.auth; }
+      pulls = { create: async () => ({ data: { number: 1, html_url: 'https://github.com/example/repo/pull/1' } }) };
+    } as never,
+  }), async (base) => {
+    const response = await fetch(`${base}/api/agent`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ projectPath: '/workspace/project', message: 'Change', createBranch: true, createPR: true, branchName: 'feature/test', stream: false }) });
+    assert.equal(response.status, 200);
+  });
+  assert.equal(githubAuth, 'bound-account');
+  assert.equal(pushedToken, 'bound-account');
+});
+
+test('reusing a cloned project keeps its binding instead of selecting the latest account', async () => {
+  let rememberedToken: string | null = null;
+  await withAgentServer(createDependencies({
+    fileSystem: { access: async () => {} } as never,
+    githubTokens: { getActiveGithubToken: () => 'wrong-latest' },
+    projectGithub: {
+      rememberClone(_user, _path, _id, token) { rememberedToken = token; },
+      resolve: async () => ({ environment: { GH_TOKEN: 'existing-binding' }, instructions: '' }),
+    },
+    models: { getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'test' }) } as never,
+    queryClaude: async () => {},
+    spawnProcess: (() => {
+      const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough() });
+      setImmediate(() => { child.stdout.end('https://github.com/example/repo.git\n'); child.emit('close', 0); });
+      return child;
+    }) as never,
+  }), async (base) => {
+    const response = await fetch(`${base}/api/agent`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ githubUrl: 'https://github.com/example/repo.git', projectPath: '/workspace/repo', message: 'Continue', stream: false }) });
+    assert.equal(response.status, 200);
+  });
+  assert.equal(rememberedToken, 'existing-binding');
 });

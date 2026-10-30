@@ -50,7 +50,7 @@ type UseChatComposerStateArgs = {
   processingSessions?: SessionActivityMap;
   canAbortSession: boolean;
   tokenBudget: Record<string, unknown> | null;
-  sendMessage: (message: unknown) => void;
+  sendMessage: (message: unknown) => void | Promise<void>;
   sendByCtrlEnter?: boolean;
   onSessionProcessing?: MarkSessionProcessing;
   /**
@@ -93,35 +93,35 @@ const createFakeSubmitEvent = () => {
 };
 
 const MAX_ATTACHMENT_COUNT = 10;
-const MAX_ATTACHMENT_SIZE = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_SIZE = 100 * 1024 * 1024;
 
 const isImageAttachment = (attachment: ChatAttachment) => {
   if (attachment.mimeType?.startsWith('image/')) return true;
   return /\.(gif|jpe?g|png|svg|webp)$/i.test(attachment.path || attachment.name || '');
 };
 
-const uploadAttachmentFiles = async (files: File[]): Promise<unknown[]> => {
-  if (files.length === 0) {
-    return [];
+const uploadAttachmentFiles = async (files: File[], cache: WeakMap<File, unknown>): Promise<unknown[]> => {
+  const attachments: unknown[] = [];
+  // Send each file separately so a batch cannot exceed the proxy's body limit.
+  // Cache successful files immediately so retrying a partial batch reuses them.
+  for (const file of files) {
+    if (!cache.has(file)) {
+      const formData = new FormData();
+      formData.append('files', file);
+      const response = await api.assets.uploadFiles(formData);
+      const result = await response.json().catch(() => null);
+      if (!response.ok) {
+        const detail = typeof result?.error === 'string' ? result.error : result?.error?.message;
+        throw new Error(detail || `File upload failed (HTTP ${response.status}). Please retry.`);
+      }
+      if (!Array.isArray(result?.attachments) || result.attachments.length !== 1) {
+        throw new Error('File upload returned an incomplete result');
+      }
+      cache.set(file, result.attachments[0]);
+    }
+    attachments.push(cache.get(file));
   }
-
-  const formData = new FormData();
-  files.forEach((file) => {
-    formData.append('files', file);
-  });
-
-  const response = await api.assets.uploadFiles(formData);
-
-  if (!response.ok) {
-    const body = await response.json().catch(() => null);
-    throw new Error(body?.error || 'Failed to upload files');
-  }
-
-  const result = await response.json();
-  if (!Array.isArray(result.attachments) || result.attachments.length !== files.length) {
-    throw new Error('File upload returned an incomplete result');
-  }
-  return result.attachments;
+  return attachments;
 };
 
 
@@ -225,6 +225,8 @@ export function useChatComposerState({
   });
   const input = inputState.value;
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  // Reuse uploaded descriptors when an unconfirmed message is retried, preserving its identity.
+  const attachmentUploadCacheRef = useRef(new WeakMap<File, unknown>());
   const [fileErrors, setFileErrors] = useState<Map<string, string>>(new Map());
   const [isTextareaExpanded, setIsTextareaExpanded] = useState(false);
   const [commandModalPayload, setCommandModalPayload] = useState<CommandModalPayload | null>(null);
@@ -560,34 +562,22 @@ export function useChatComposerState({
   }, []);
 
   const handleAttachmentFiles = useCallback((files: File[]) => {
-    const validFiles = files.filter((file) => {
-      try {
-        if (!file || typeof file !== 'object') {
-          console.warn('Invalid file object:', file);
-          return false;
-        }
-
-        if (file.size > MAX_ATTACHMENT_SIZE) {
-          const fileName = file.name || 'Unknown file';
-          setFileErrors((previous) => {
-            const next = new Map(previous);
-            next.set(fileName, 'File too large (max 10MB)');
-            return next;
-          });
-          return false;
-        }
-
-        return true;
-      } catch (error) {
-        console.error('Error validating file:', error, file);
-        return false;
+    const errors = new Map<string, string>();
+    const accepted: File[] = [];
+    for (const file of files) {
+      if (file.size > MAX_ATTACHMENT_SIZE) {
+        errors.set(file.name, 'File too large (max 100MB)');
+      } else if (attachedFiles.length + accepted.length >= MAX_ATTACHMENT_COUNT) {
+        errors.set(file.name, 'Too many files (max 10 attachments)');
+      } else {
+        accepted.push(file);
       }
-    });
-
-    if (validFiles.length > 0) {
-      setAttachedFiles((previous) => [...previous, ...validFiles].slice(0, MAX_ATTACHMENT_COUNT));
     }
-  }, []);
+    // Validate here so picker, paste and drop all report rejected files.
+    // react-dropzone's filtering previously hid failures from this callback.
+    setFileErrors(errors);
+    if (accepted.length) setAttachedFiles((previous) => [...previous, ...accepted].slice(0, MAX_ATTACHMENT_COUNT));
+  }, [attachedFiles]);
 
   const handlePaste = useCallback(
     (event: ClipboardEvent<HTMLTextAreaElement>) => {
@@ -615,8 +605,8 @@ export function useChatComposerState({
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    maxSize: MAX_ATTACHMENT_SIZE,
-    maxFiles: MAX_ATTACHMENT_COUNT,
+    // Use the native input consistently on mobile browsers.
+    useFsAccessApi: false,
     onDrop: handleAttachmentFiles,
     noClick: true,
     noKeyboard: true,
@@ -658,10 +648,12 @@ export function useChatComposerState({
   // Tracks an acknowledged live send separately from the task's running state.
   const [isSteering, setIsSteering] = useState(false);
   const steeringInFlightRef = useRef(false);
+  const canSteer = (provider === 'codex' && isLoading)
+    || (provider === 'claude' && (isLoading || Boolean(sessionKey && processingSessions?.get(sessionKey)?.background)));
   const handleSteer = useCallback(async () => {
     const targetSessionId = sessionKey;
     const content = inputValueRef.current;
-    if (steeringInFlightRef.current || provider !== 'codex' || !isLoading || !targetSessionId || !content.trim() || attachedFiles.length > 0) return;
+    if (steeringInFlightRef.current || !canSteer || !targetSessionId || !content.trim() || attachedFiles.length > 0) return;
     steeringInFlightRef.current = true;
     setIsSteering(true);
     try {
@@ -690,7 +682,7 @@ export function useChatComposerState({
       steeringInFlightRef.current = false;
       setIsSteering(false);
     }
-  }, [sessionKey, provider, isLoading, attachedFiles.length, recordSentMessage, addMessage, setInput, scrollToBottom]);
+  }, [sessionKey, canSteer, attachedFiles.length, recordSentMessage, addMessage, setInput, scrollToBottom]);
 
   // Read at send time through a ref: the map changes on every poll, and a
   // submit handler rebuilt that often would re-render the whole composer.
@@ -736,7 +728,7 @@ export function useChatComposerState({
         const queuedSessionKey = sessionKey;
         let uploadedAttachments: unknown[] = [];
         try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+          uploadedAttachments = await uploadAttachmentFiles(currentAttachments, attachmentUploadCacheRef.current);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('Queued file upload failed:', error);
@@ -833,7 +825,7 @@ export function useChatComposerState({
       let uploadedAttachments = previouslyUploadedAttachments;
       if (uploadedAttachments.length === 0 && currentAttachments.length > 0) {
         try {
-          uploadedAttachments = await uploadAttachmentFiles(currentAttachments);
+          uploadedAttachments = await uploadAttachmentFiles(currentAttachments, attachmentUploadCacheRef.current);
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           console.error('File upload failed:', error);
@@ -933,55 +925,54 @@ export function useChatComposerState({
         ...(editingAnchorId ? { replacesAnchorId: editingAnchorId } : {}),
       };
 
+      const sendingScope = draftScopeRef.current;
+      // Retain the draft and show no successful echo until the gateway accepts it.
+      try {
+        // One message shape for every provider. The backend resolves the
+        // provider, project path, and provider-native resume id from the
+        // session row; `options` only carries composer-level preferences.
+        await sendMessage({
+          // Replacing an already-sent message is its own frame: it changes the
+          // shape of the conversation, so it gets validated separately and can
+          // report why it was refused.
+          type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
+          sessionId: targetSessionId,
+          ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
+          content: messageContent,
+          options: {
+            ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
+            attachments: uploadedAttachments,
+          },
+        });
+      } catch (error) {
+        if (draftScopeRef.current === sendingScope) {
+          addMessage({ type: 'error', content: error instanceof Error ? error.message : String(error), timestamp: new Date() });
+        }
+        return;
+      }
+      recordSentMessage(currentInput, targetSessionId);
+      // Acknowledgements can arrive after navigation or after new text is typed.
+      const sameScope = draftScopeRef.current === sendingScope || sessionKeyRef.current === targetSessionId;
+      if (!sameScope) {
+        if (readDraftText(targetSessionId) === currentInput) writeDraftText(targetSessionId, '');
+        return;
+      }
       addMessage(userMessage);
-      // Mark this request as processing in the per-session activity map (the
-      // single source of truth the indicator derives from). The id is always
-      // concrete at this point — no pending placeholder exists anymore.
-      onSessionProcessing?.(targetSessionId, {
-        statusText: null,
-        canInterrupt: true,
-      });
-
+      onSessionProcessing?.(targetSessionId, { statusText: null, canInterrupt: true });
       setIsUserScrolledUp(false);
       setTimeout(() => scrollToBottom(), 100);
-
-      // One message shape for every provider. The backend resolves the
-      // provider, project path, and provider-native resume id from the
-      // session row; `options` only carries composer-level preferences.
-      sendMessage({
-        // Replacing an already-sent message is its own frame: it changes the
-        // shape of the conversation, so it gets validated separately and can
-        // report why it was refused.
-        type: editingAnchorId ? 'chat.edit-send' : 'chat.send',
-        sessionId: targetSessionId,
-        ...(editingAnchorId ? { anchorId: editingAnchorId } : {}),
-        content: messageContent,
-        options: {
-          ...(queuedSubmission?.options ?? buildSendOptions(messageContent)),
-          attachments: uploadedAttachments,
-        },
-      });
       setEditingAnchorId(null);
-
-      // Recorded under the (possibly just-allocated) session id, so the first
-      // message of a new chat lands in the history of the session the user is
-      // navigated to. Queued drafts were recorded when they were queued; the
-      // consecutive-duplicate check keeps this second call a no-op.
-      recordSentMessage(currentInput, targetSessionId);
-      setInput('');
-      inputValueRef.current = '';
-      resetCommandMenuState();
-      setAttachedFiles([]);
+      if (inputValueRef.current === currentInput) {
+        setInput('');
+        inputValueRef.current = '';
+        resetCommandMenuState();
+        setIsTextareaExpanded(false);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
+        if (draftScopeRef.current) writeDraftText(draftScopeRef.current, '');
+      }
+      setAttachedFiles((files) => files.filter((file) => !currentAttachments.includes(file)));
       setFileErrors(new Map());
-      setIsTextareaExpanded(false);
 
-      if (textareaRef.current) {
-        textareaRef.current.style.height = 'auto';
-      }
-
-      if (draftScopeRef.current) {
-        writeDraftText(draftScopeRef.current, '');
-      }
     },
     [
       selectedSession,
@@ -1013,6 +1004,9 @@ export function useChatComposerState({
   // again — and each extra submit of a new chat allocated its own session and
   // sent it the same first message.
   const submittingScopesRef = useRef(new Set<string>());
+  // Exposes the active scope's admission wait so the submit button cannot imply delivery.
+  const [sendingScopes, setSendingScopes] = useState<Set<string>>(new Set());
+  const isSending = sendingScopes.has(draftScope ?? '');
 
   const handleSubmit = useCallback(
     async (
@@ -1026,10 +1020,12 @@ export function useChatComposerState({
         return;
       }
       submittingScopesRef.current.add(scope);
+      setSendingScopes(new Set(submittingScopesRef.current));
       try {
         await submitMessage(event, queuedSubmission);
       } finally {
         submittingScopesRef.current.delete(scope);
+        setSendingScopes(new Set(submittingScopesRef.current));
       }
     },
     [submitMessage],
@@ -1387,7 +1383,9 @@ export function useChatComposerState({
     openAttachmentPicker: open,
     handleSubmit,
     handleSteer,
+    canSteer,
     isSteering,
+    isSending,
     queuedDraft,
     editQueuedDraft,
     deleteQueuedDraft,

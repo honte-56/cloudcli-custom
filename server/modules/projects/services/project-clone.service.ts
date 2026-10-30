@@ -2,6 +2,7 @@ import { access, mkdir, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 // cross-spawn: drop-in spawn with Windows .cmd/PATHEXT resolution.
+import { rememberCloneGithubCredential } from '@/modules/github-auth/index.js';
 import spawn from 'cross-spawn';
 
 import { githubTokensDb } from '@/modules/database/index.js';
@@ -50,6 +51,7 @@ type CloneProjectDependencies = {
     environment: NodeJS.ProcessEnv,
   ) => GitCloneProcess;
   registerProject: (projectPath: string, customName: string) => Promise<{ project: Record<string, unknown> }>;
+  rememberCredential: typeof rememberCloneGithubCredential;
   logError: (message: string, error: unknown) => void;
 };
 
@@ -169,6 +171,7 @@ const defaultDependencies: CloneProjectDependencies = {
       projectPath,
       customName,
     }) as Promise<{ project: Record<string, unknown> }>,
+  rememberCredential: rememberCloneGithubCredential,
   logError: (message: string, error: unknown): void => {
     console.error(message, error);
   },
@@ -330,6 +333,7 @@ export async function startCloneProject(
       if (code === 0) {
         try {
           const createdProject = await dependencies.registerProject(clonePath, repoName);
+          dependencies.rememberCredential(Number(input.userId), clonePath, input.githubTokenId ?? null, githubToken);
           handlers.onComplete({
             project: createdProject.project,
             message: 'Repository cloned successfully',

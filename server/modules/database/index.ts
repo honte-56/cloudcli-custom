@@ -1,4 +1,5 @@
 export { initializeDatabase } from '@/modules/database/init-db.js';
+export { chatReceiptsDb } from '@/modules/database/repositories/chat-receipts.db.js';
 export { closeConnection, getConnection, getDatabasePath } from '@/modules/database/connection.js';
 export { apiKeysDb } from '@/modules/database/repositories/api-keys.js';
 export { appConfigDb } from '@/modules/database/repositories/app-config.js';
@@ -25,3 +26,5 @@ export { userPreferencesDb } from '@/modules/database/repositories/user-preferen
 export { vapidKeysDb } from '@/modules/database/repositories/vapid-keys.js';
 export { scheduledMessagesDb } from './repositories/scheduled-messages.db.js';
 export type { ScheduledMessageRow, ScheduledMessageStatus } from './repositories/scheduled-messages.db.js';
+
+export { projectGithubCredentialsDb } from '@/modules/database/repositories/project-github-credentials.db.js';

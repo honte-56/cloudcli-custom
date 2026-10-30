@@ -2,6 +2,7 @@ import * as crypto from 'node:crypto';
 import * as fs from 'node:fs/promises';
 import os from 'node:os';
 
+import { rememberCloneGithubCredential, resolveProjectGithubAuthentication } from '@/modules/github-auth/index.js';
 import { Octokit } from '@octokit/rest';
 import spawn from 'cross-spawn';
 
@@ -44,6 +45,7 @@ export function createAgentModule(externalDependencies: AgentExternalDependencie
     githubTokens: {
       getActiveGithubToken: (userId) => githubTokensDb.getActiveGithubToken(userId),
     },
+    projectGithub: { rememberClone: rememberCloneGithubCredential, resolve: resolveProjectGithubAuthentication },
     projects: {
       createProjectPath: (projectPath, customName) =>
         projectsDb.createProjectPath(projectPath, customName),

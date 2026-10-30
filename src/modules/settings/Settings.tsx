@@ -268,7 +268,7 @@ function Settings({ isOpen, onClose, projects = [], initialTab = 'agents' }: Set
                 />
               )}
 
-              {activeTab === 'api' && <CredentialsSettingsTab />}
+              {activeTab === 'api' && <CredentialsSettingsTab projects={projects} />}
 
               {activeTab === 'voice' && <VoiceSettingsTab />}
 

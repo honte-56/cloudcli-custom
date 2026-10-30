@@ -311,3 +311,22 @@ test('startRun rejects a second concurrent run for the same session', async () =
     assert.ok(third);
   });
 });
+
+test('live input reactivates the held writer and completes the follow-up once', async () => {
+  await withIsolatedDatabase(() => {
+    sessionsDb.createAppSession('held-input', 'claude', '/workspace/demo');
+    const connection = new FakeConnection();
+    const run = chatRunRegistry.startRun({ appSessionId: 'held-input', provider: 'claude', providerSessionId: null, connection, userId: null });
+    assert.ok(run);
+    run.writer.sendComplete({ exitCode: 0 });
+    assert.equal(chatRunRegistry.isProcessing('held-input'), false);
+    run.writer.send({ kind: 'status', provider: 'claude', text: 'Processing…', status: 'live_input' });
+    assert.equal(chatRunRegistry.isProcessing('held-input'), true);
+    assert.equal(chatRunRegistry.getRun('held-input'), run);
+    assert.equal(chatRunRegistry.startRun({ appSessionId: 'held-input', provider: 'claude', providerSessionId: null, connection, userId: null }), null);
+    run.writer.sendComplete({ exitCode: 0 });
+    run.writer.sendComplete({ exitCode: 0 });
+    assert.equal(connection.frames.filter((frame) => frame.kind === 'complete').length, 2);
+    assert.equal(chatRunRegistry.isProcessing('held-input'), false);
+  });
+});

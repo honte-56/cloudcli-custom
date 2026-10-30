@@ -307,3 +307,31 @@ test('a provider that has to branch to rewind is rewound before the run, not dur
     assert.equal(truncatedBeforeRewind, true);
   }, CODEX_TRANSCRIPT_ROWS);
 });
+
+for (const type of ['chat.send', 'chat.edit-send']) {
+  test(`${type} confirms admission and deduplicates retries after completion`, async () => {
+    await withGateway('claude', async ({ socket, runs }) => {
+      const frame = JSON.stringify({ type, sessionId: SESSION_ID, content: 'confirmed', anchorId: 'e-u2', requestId: 'confirmed-request-123' });
+      socket.emit('message', frame);
+      await settle();
+      assert.equal(runs.length, 1);
+      assert.equal(socket.frames.find(item => item.kind === 'chat_send_receipt')?.status, 'accepted');
+      socket.emit('message', frame);
+      await settle();
+      assert.equal(runs.length, 1);
+      assert.equal(socket.frames.at(-1)?.status, 'accepted');
+    });
+  });
+}
+
+test('busy sessions explicitly reject an acknowledged send without running it', async () => {
+  await withGateway('claude', async ({ socket, runs }) => {
+    holdTheNextRun();
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'first' }));
+    await settle();
+    socket.emit('message', JSON.stringify({ type: 'chat.send', sessionId: SESSION_ID, content: 'second', requestId: 'busy-request-123456' }));
+    await settle();
+    assert.equal(runs.length, 1);
+    assert.equal(socket.frames.at(-1)?.status, 'rejected');
+  });
+});

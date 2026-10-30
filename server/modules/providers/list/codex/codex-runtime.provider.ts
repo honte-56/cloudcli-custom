@@ -311,7 +311,15 @@ async function queryCodex(
 
   try {
     const codexPathOverride = process.env.CLOUDCLI_CODEX_PATH?.trim();
-    codex = new Codex({ ...(codexPathOverride ? { codexPathOverride } : {}) });
+    codex = new Codex({
+      ...(codexPathOverride ? { codexPathOverride } : {}),
+      ...(options.environment ? {
+        env: options.environment,
+        // Codex normally strips TOKEN variables from shell tools. The run-local
+        // environment is explicitly prepared for Git and gh authentication.
+        config: { shell_environment_policy: { ignore_default_excludes: true } },
+      } : {}),
+    });
 
     const threadOptions: ThreadOptions = {
       workingDirectory,

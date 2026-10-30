@@ -60,6 +60,7 @@ function createDependencies(queryClaude: RunFunction): AgentDependencies {
     users: { getFirstUser: () => ({ id: 1, username: 'test-user' }) },
     apiKeys: { validateApiKey: () => undefined },
     githubTokens: { getActiveGithubToken: () => null },
+    projectGithub: { rememberClone() {}, resolve: async () => null },
     projects: { createProjectPath: () => ({ outcome: 'created' }) },
     models: { getProviderModels: async () => ({ OPTIONS: [], DEFAULT: 'default-model' }) } as unknown as AgentDependencies['models'],
     sessions: {

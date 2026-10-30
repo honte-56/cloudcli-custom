@@ -30,6 +30,11 @@ type GithubTokenLookup = CredentialRow & {
 };
 
 export const githubTokensDb = {
+  /** Used by Projects when an API/clone caller supplies an already stored token value. */
+  findActiveTokenId(userId: number, token: string): number | null {
+    const row = getConnection().prepare("SELECT id FROM user_credentials WHERE user_id = ? AND credential_type = 'github_token' AND credential_value = ? AND is_active = 1 ORDER BY created_at DESC LIMIT 1").get(userId, token) as { id: number } | undefined;
+    return row?.id ?? null;
+  },
   /** Creates a GitHub token credential entry. */
   createGithubToken(
     userId: number,

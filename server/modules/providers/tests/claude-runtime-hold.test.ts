@@ -7,6 +7,7 @@ import test from 'node:test';
 import { ClaudeSessionsProvider } from '@/modules/providers/list/claude/claude-sessions.provider.js';
 import { CLAUDE_PREDEFINED_MODELS } from '@/modules/providers/list/claude/claude-models.provider.js';
 import {
+  claudeRuntime,
   listClaudeSDKBackgroundWork,
   queryClaudeSDK,
   stopClaudeSDKTask,
@@ -29,6 +30,9 @@ type Scripted = {
   end: () => void;
   released: () => boolean;
   stopped: string[];
+  inputs: Record<string, unknown>[];
+  interrupts: number;
+  queries: number;
 };
 
 /** A stand-in for the SDK query: yields what the test emits, and reads the held prompt to notice its release. */
@@ -42,12 +46,13 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     emit: (message) => { queue.push(message); wake?.(); },
     end: () => { queue.push(null); wake?.(); },
     released: () => released,
-    stopped,
+    stopped, inputs: [], interrupts: 0, queries: 0,
   };
 
   const createQuery: NonNullable<ProviderRuntimeContext['createQuery']> = ({ prompt }) => {
+    script.queries++;
     void (async () => {
-      for await (const _message of prompt) { /* the CLI reads its stdin */ }
+      for await (const message of prompt) { script.inputs.push(message as Record<string, unknown>); }
       released = true;
     })();
 
@@ -67,7 +72,7 @@ function createScriptedQuery(): { createQuery: NonNullable<ProviderRuntimeContex
     })();
 
     return Object.assign(iterator, {
-      interrupt: async () => {},
+      interrupt: async () => { script.interrupts++; },
       stopTask: async (taskId: string) => { stopped.push(taskId); },
     });
   };
@@ -94,6 +99,7 @@ async function withRun(
 
   try {
     const done = queryClaudeSDK('hello', { sessionId: SESSION_ID, cwd }, writer as never, context);
+    await waitFor(() => script.inputs.length === 1);
     await runTest({ script, sent, done });
     script.end();
     await done;
@@ -305,5 +311,79 @@ test('a turn whose tool emits no task events still holds on the static rule', as
     await settle();
 
     assert.equal(script.released(), false, 'Monitor reports no task, so the launch rule decides');
+  });
+});
+
+for (const background of [false, true]) {
+  test(`live input uses the same ${background ? 'background-held' : 'foreground'} CLI and leaves its task running`, async () => {
+    await withRun(async ({ script, sent }) => {
+      script.emit(init());
+      script.emit(toolUse('toolu_shell', 'Bash', { command: 'sleep 90', run_in_background: true }));
+      script.emit(taskStarted('shell1', 'toolu_shell', 'local_bash'));
+      if (background) script.emit(result());
+      await settle();
+      const completedBefore = sent.filter((message) => message.kind === 'complete').length;
+      let delivered = false;
+      const sending = claudeRuntime.steer(SESSION_ID, 'continue without interrupting').then(() => { delivered = true; });
+      await waitFor(() => script.inputs.length === 2);
+      const input = script.inputs[1];
+      assert.equal(delivered, false, 'stdin consumption is not a CLI receipt');
+      assert.equal(input.priority, 'next');
+      assert.equal(script.queries, 1);
+      assert.equal(script.interrupts, 0);
+      assert.deepEqual(script.stopped, []);
+      assert.equal(script.released(), false);
+      assert.equal(listClaudeSDKBackgroundWork()[0].tasks[0].taskId, 'shell1');
+      // The preceding result must not close stdin before the follow-up is read.
+      script.emit(result());
+      await settle();
+      assert.equal(script.released(), false);
+      assert.equal(sent.filter((message) => message.kind === 'complete').length, completedBefore);
+      script.emit({ ...input, session_id: NATIVE_ID, isReplay: true });
+      await sending;
+      assert.equal(delivered, true);
+      script.emit(result());
+      await settle();
+      assert.equal(sent.filter((message) => message.kind === 'complete').length, completedBefore + 1);
+      assert.equal(script.released(), false, 'background task still owns its process');
+      script.emit(taskNotification('shell1', 'toolu_shell', 'completed'));
+      script.emit(result());
+      await settle();
+      assert.equal(script.released(), true);
+      await assert.rejects(claudeRuntime.steer(SESSION_ID, 'too late'), /no longer accepting/);
+    });
+  });
+}
+
+test('CLI exit rejects a live send without a receipt and never starts a replacement', async () => {
+  await withRun(async ({ script, done }) => {
+    script.emit(init());
+    await settle();
+    const rejected = assert.rejects(claudeRuntime.steer(SESSION_ID, 'pending'), /stopped before acknowledging/);
+    await waitFor(() => script.inputs.length === 2);
+    script.end();
+    await done;
+    await rejected;
+    assert.equal(script.queries, 1);
+    await assert.rejects(claudeRuntime.steer(SESSION_ID, 'late'), /No active Claude/);
+  });
+});
+
+test('stopping the last background task cannot close an active live follow-up', async () => {
+  await withRun(async ({ script }) => {
+    script.emit(init());
+    script.emit(taskStarted('shell1', 'toolu_shell', 'local_bash'));
+    script.emit(result());
+    await settle();
+    const sending = claudeRuntime.steer(SESSION_ID, 'answer while it stops');
+    await waitFor(() => script.inputs.length === 2);
+    script.emit({ ...script.inputs[1], session_id: NATIVE_ID, isReplay: true });
+    await sending;
+    script.emit(taskNotification('shell1', 'toolu_shell', 'stopped'));
+    await settle();
+    assert.equal(script.released(), false);
+    script.emit(result());
+    await settle();
+    assert.equal(script.released(), true);
   });
 });

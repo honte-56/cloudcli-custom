@@ -173,7 +173,7 @@
       "selectToken": "選取權杖",
       "selectTokenPlaceholder": "-- 選取權杖 --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "此權杖僅用於此操作",
+      "tokenHelp": "權杖會儲存並綁定至此專案，供後續 Agent 工作階段使用。",
       "publicRepoInfo": "公開儲存庫不需要身分驗證。如果複製公開儲存庫，可以略過提供權杖。",
       "noTokensHelp": "沒有可用的已儲存權杖。您可以在 設定 → API 金鑰 中新增權杖以便重複使用。",
       "optionalTokenPublic": "GitHub 權杖（公開儲存庫可選）",

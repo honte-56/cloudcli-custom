@@ -176,9 +176,9 @@
       "selectToken": "Select Token",
       "selectTokenPlaceholder": "-- Select a token --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "This token will be used only for this operation",
+      "tokenHelp": "The token is saved and bound to this project for subsequent agent runs.",
       "publicRepoInfo": "Public repositories don't require authentication. You can skip providing a token if cloning a public repo.",
-      "noTokensHelp": "No stored tokens available. You can add tokens in Settings → API Keys for easier reuse.",
+      "noTokensHelp": "No stored tokens available. You can add tokens in Settings → API Keys for easier reuse. The token is saved and bound to this project for subsequent agent runs.",
       "optionalTokenPublic": "GitHub Token (Optional for Public Repos)",
       "tokenPublicPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx (leave empty for public repos)"
     },

@@ -34,8 +34,8 @@ function turnInput(command: string, options: AnyRecord): AnyRecord[] {
 
 /** Used by the Codex adapter and provider tests to build an isolated live runtime. */
 export function createCodexLiveRuntime(
-  makeClient: (notification: (method: string, params: AnyRecord) => void, failure: (error: Error) => void) => LiveClient =
-    (notification, failure) => new CodexLiveClient(notification, failure),
+  makeClient: (notification: (method: string, params: AnyRecord) => void, failure: (error: Error) => void, environment?: NodeJS.ProcessEnv) => LiveClient =
+    (notification, failure, environment) => new CodexLiveClient(notification, failure, undefined, environment),
 ) {
 const runs = new Map<string, LiveRun>();
 async function runLive(command: string, options: AnyRecord, writer: ProviderRuntimeWriter, context: ProviderRuntimeContext): Promise<void> {
@@ -87,7 +87,7 @@ async function runLive(command: string, options: AnyRecord, writer: ProviderRunt
         send(createNormalizedMessage({ kind: 'status', text: 'token_budget', provider: 'codex', sessionId: run.threadId || key, tokenBudget: { used: usage.total.totalTokens, total: usage.modelContextWindow || 200000, inputTokens: usage.total.inputTokens, outputTokens: usage.total.outputTokens, breakdown: { input: usage.total.inputTokens, output: usage.total.outputTokens } } }));
       }
       if (method === 'error' && !params.willRetry) fail(new Error(params.error?.message || 'Codex run failed'));
-    }, fail);
+    }, fail, options.environment);
     runs.set(key, run);
     await run.client.initialize();
     const model = await context.resolveResumeModel(options.sessionId, options.model);
@@ -97,6 +97,7 @@ async function runLive(command: string, options: AnyRecord, writer: ProviderRunt
     const bypass = options.permissionMode === 'bypassPermissions';
     const thread = await run.client.call(nativeId ? 'thread/resume' : 'thread/start', {
       ...(nativeId ? { threadId: nativeId } : {}), model,
+      ...(options.environment ? { config: { 'shell_environment_policy.ignore_default_excludes': true } } : {}),
       cwd: options.cwd || options.projectPath || process.cwd(),
       sandbox: bypass ? 'danger-full-access' : 'workspace-write',
       approvalPolicy: bypass || options.permissionMode === 'acceptEdits' ? 'never' : 'on-request',

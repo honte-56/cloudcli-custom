@@ -222,7 +222,7 @@
       "selectToken": "בחירת טוקן",
       "selectTokenPlaceholder": "-- בחירת טוקן --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "הטוקן ישמש רק לפעולה הזו",
+      "tokenHelp": "הטוקן נשמר ומשויך לפרויקט הזה לשימוש בהרצות הבאות של הסוכן.",
       "publicRepoInfo": "מאגרים ציבוריים לא דורשים אימות. אפשר לדלג על הטוקן כשמשכפלים מאגר ציבורי.",
       "noTokensHelp": "אין טוקנים שמורים. אפשר להוסיף טוקנים בהגדרות → מפתחות API לשימוש חוזר נוח.",
       "optionalTokenPublic": "טוקן GitHub (אופציונלי למאגרים ציבוריים)",

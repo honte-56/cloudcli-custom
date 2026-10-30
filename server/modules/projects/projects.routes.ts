@@ -1,3 +1,4 @@
+import { createProjectGithubCredentialRouter } from '@/modules/projects/project-github-credential.routes.js';
 import express from 'express';
 
 import { createProject, updateProjectDisplayName } from '@/modules/projects/services/project-management.service.js';
@@ -18,6 +19,7 @@ import { applyLegacyStarredProjectIds, toggleProjectStar } from '@/modules/proje
 const PENDING_CLONE_REQUEST_TTL_MS = 60_000;
 
 const router = express.Router();
+router.use(createProjectGithubCredentialRouter());
 
 function readQueryStringValue(value: unknown): string {
   if (typeof value === 'string') {

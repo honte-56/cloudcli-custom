@@ -228,7 +228,7 @@
       "selectToken": "Vybrat token",
       "selectTokenPlaceholder": "-- Vyberte token --",
       "tokenPlaceholder": "ghp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-      "tokenHelp": "Tento token se použije jen pro tuto operaci",
+      "tokenHelp": "Token se uloží a přiřadí k tomuto projektu pro další spuštění agenta.",
       "publicRepoInfo": "Veřejné repozitáře ověření nevyžadují. Pokud klonujete veřejný repozitář, zadání tokenu můžete přeskočit.",
       "noTokensHelp": "Nejsou k dispozici žádné uložené tokeny. Pro snazší opakované použití je můžete přidat v Nastavení → API klíče.",
       "optionalTokenPublic": "GitHub token (u veřejných repozitářů volitelný)",
