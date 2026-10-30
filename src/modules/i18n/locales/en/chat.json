@@ -395,5 +395,37 @@
     "effortLevels": "Reasoning levels",
     "effortLevelsHint": "Select the reasoning-effort levels this model accepts. If none are selected, no effort level can be chosen for this model in the composer.",
     "effortSummary": "Reasoning: {{levels}}"
+  },
+  "planUsage": {
+    "title": "Plan usage",
+    "plan": "{{name}} plan",
+    "refresh": "Refresh plan usage",
+    "loading": "Loading plan usage…",
+    "loadFailed": "Couldn't load plan usage.",
+    "windows": {
+      "five_hour": "5-hour limit",
+      "weekly": "Weekly limit",
+      "weekly_opus": "Weekly limit (Opus)",
+      "weekly_sonnet": "Weekly limit (Sonnet)",
+      "generic": "{{hours}}-hour limit",
+      "unknown": "Usage limit"
+    },
+    "duration": {
+      "minutes": "{{count}} min",
+      "hours": "{{count}} h",
+      "days": "{{count}} d"
+    },
+    "resetsIn": "Resets in {{duration}}",
+    "windowReset": "Window has reset",
+    "credits": "Credits balance: {{balance}}",
+    "creditsUnlimited": "Credits: unlimited",
+    "updatedLive": "Updated just now",
+    "updatedFromSession": "From the last Codex session, {{duration}} ago",
+    "status": {
+      "unauthenticated": "No subscription login was found on this server.",
+      "token-expired": "The login has expired. Run the CLI once in a terminal to refresh it.",
+      "unsupported": "No plan usage data is available yet.",
+      "error": "Couldn't load plan usage."
+    }
   }
 }

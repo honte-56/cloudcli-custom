@@ -434,6 +434,8 @@ export const api = {
       get(`/api/providers/sessions/${encodeURIComponent(sessionId)}/token-usage`),
     sessionActiveModel: (provider: string, sessionId: string) =>
       get(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`),
+    planUsage: (provider: string) =>
+      get(`/api/providers/${encodeURIComponent(provider)}/plan-usage`),
     setSessionActiveModel: (provider: string, sessionId: string, model: string) =>
       post(`/api/providers/${provider}/sessions/${encodeURIComponent(sessionId)}/active-model`, {
         model,

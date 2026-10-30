@@ -26,6 +26,7 @@ import type {
   ProviderModelsDefinition,CommandModalPayload,CostCommandData,HelpCommandData,ModelCommandData,StatusCommandData
 } from '@/shared/types';
 import ModelLibraryPanel from '@/modules/chat/modals/ModelLibraryPanel';
+import PlanUsageSection from '@/modules/chat/modals/PlanUsageSection';
 
 type CommandResultModalProps = {
   payload: CommandModalPayload | null;
@@ -479,6 +480,8 @@ function CostContent({ data }: { data: CostCommandData }) {
           );
         })}
       </div>
+
+      <PlanUsageSection provider={data.provider} />
 
       <div className="rounded-2xl border border-border/70 bg-muted/20 p-4">
         <div className="grid gap-3 sm:grid-cols-2">

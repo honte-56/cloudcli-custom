@@ -302,5 +302,37 @@
     "effortLevels": "推理级别",
     "effortLevelsHint": "选择此模型支持的推理强度级别。若未选择任何级别，将无法在输入框中为此模型选择级别。",
     "effortSummary": "推理：{{levels}}"
+  },
+  "planUsage": {
+    "title": "套餐用量",
+    "plan": "{{name}} 套餐",
+    "refresh": "刷新套餐用量",
+    "loading": "正在加载套餐用量…",
+    "loadFailed": "无法加载套餐用量。",
+    "windows": {
+      "five_hour": "5 小时额度",
+      "weekly": "每周额度",
+      "weekly_opus": "每周额度(Opus)",
+      "weekly_sonnet": "每周额度(Sonnet)",
+      "generic": "{{hours}} 小时额度",
+      "unknown": "用量额度"
+    },
+    "duration": {
+      "minutes": "{{count}} 分钟",
+      "hours": "{{count}} 小时",
+      "days": "{{count}} 天"
+    },
+    "resetsIn": "{{duration}}后重置",
+    "windowReset": "额度窗口已重置",
+    "credits": "积分余额:{{balance}}",
+    "creditsUnlimited": "积分:不限量",
+    "updatedLive": "刚刚更新",
+    "updatedFromSession": "来自最近一次 Codex 会话,{{duration}}前",
+    "status": {
+      "unauthenticated": "服务器上未找到订阅登录信息。",
+      "token-expired": "登录已过期,请在终端中运行一次对应的 CLI 以刷新。",
+      "unsupported": "暂无套餐用量数据。",
+      "error": "无法加载套餐用量。"
+    }
   }
 }
