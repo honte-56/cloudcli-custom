@@ -2189,3 +2189,55 @@ test('synchronizeFile skips non-jsonl files', { concurrency: false }, async () =
     assert.equal(result, null);
   });
 });
+
+test('Claude history ignores the CLI api-request bookkeeping rows instead of replaying them as user messages', { concurrency: false }, async () => {
+  const tempRoot = await mkdtemp(path.join(os.tmpdir(), 'claude-api-request-rows-'));
+
+  try {
+    const sessionPath = path.join(tempRoot, `${SESSION_ID}.jsonl`);
+    const prompt = 'Please summarise the release notes.';
+    await writeFile(sessionPath, [
+      { type: 'queue-operation', operation: 'enqueue', timestamp: '2026-08-21T10:00:00.000Z', sessionId: SESSION_ID, content: prompt },
+      {
+        parentUuid: null,
+        isSidechain: false,
+        type: 'user',
+        uuid: 'user-1',
+        timestamp: '2026-08-21T10:00:00.100Z',
+        sessionId: SESSION_ID,
+        message: { role: 'user', content: prompt },
+      },
+      // Content-addressed copies of the request body: a bare message, no uuid, no timestamp.
+      { type: 'api-request-blob', sessionId: SESSION_ID, hash: 'a1', message: { role: 'user', content: [{ type: 'text', text: prompt }] } },
+      { type: 'api-request-blob', sessionId: SESSION_ID, hash: 'b2', message: { role: 'user', content: [{ type: 'text', text: '[Image: source: /tmp/1.png]' }] } },
+      { type: 'api-request-shape', sessionId: SESSION_ID, shapeHash: 'c3', timestamp: '2026-08-21T10:00:01.000Z' },
+      { type: 'api-request', sessionId: SESSION_ID, id: 'req-1', timestamp: '2026-08-21T10:00:01.000Z', params: {} },
+      {
+        parentUuid: 'user-1',
+        isSidechain: false,
+        type: 'assistant',
+        uuid: 'assistant-1',
+        timestamp: '2026-08-21T10:00:02.000Z',
+        sessionId: SESSION_ID,
+        message: { role: 'assistant', content: [{ type: 'text', text: 'Here is the summary.' }] },
+      },
+    ].map((row) => JSON.stringify(row)).join('\n') + '\n', 'utf8');
+
+    await withIsolatedDatabase(async () => {
+      const now = new Date().toISOString();
+      sessionsDb.createSession(SESSION_ID, 'claude', tempRoot, 'Release notes', now, now, sessionPath);
+
+      const history = await new ClaudeSessionsProvider().fetchHistory(SESSION_ID, {
+        providerSessionId: SESSION_ID,
+      });
+
+      const userTexts = history.messages
+        .filter((message) => message.role === 'user')
+        .map((message) => message.content);
+      assert.deepEqual(userTexts, [prompt], 'the prompt must appear once, with no request-body copies');
+      assert.equal(history.messages.some((message) => String(message.content).startsWith('[Image: source')), false);
+    });
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
+});

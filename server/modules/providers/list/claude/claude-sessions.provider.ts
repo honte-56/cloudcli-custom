@@ -19,6 +19,7 @@ import type {
   WorkflowInfo,
 } from '@/shared/types.js';
 import { parseFilesInputTag } from '@/shared/image-attachments.js';
+import { isClaudeApiRequestRow } from '@/modules/providers/list/claude/claude-transcript-rows.js';
 import { prepareTranscriptMessages, truncateNestedOutput } from '@/shared/message-unification.js';
 import {
   createNormalizedMessage,
@@ -480,7 +481,7 @@ async function readTranscriptRows(jsonlPath: string, providerSessionId: string):
     }
     try {
       const entry = JSON.parse(line) as AnyRecord;
-      if (entry.sessionId === providerSessionId) {
+      if (entry.sessionId === providerSessionId && !isClaudeApiRequestRow(entry)) {
         rows.push(entry);
       }
     } catch {
